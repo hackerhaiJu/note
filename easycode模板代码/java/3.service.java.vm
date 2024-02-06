@@ -1,0 +1,72 @@
+##导入宏定义
+$!{define.vm}
+
+##设置表后缀（宏定义）
+#setTableSuffix("Service")
+
+##保存文件（宏定义）
+#save("/service", "Service.java")
+
+##包路径（宏定义）
+#setPackageSuffix("service")
+
+##拿到主键
+#if(!$tableInfo.pkColumn.isEmpty())
+    #set($pk = $tableInfo.pkColumn.get(0))
+#end
+
+##设置查询id的参数名称
+#set($idName = $tool.append($tool.firstLowerCase($tableInfo.name), "Id")))
+
+##设置小写开头的表名
+#set($lowerTableName = $tool.firstLowerCase($tableInfo.name))
+
+import $!{tableInfo.savePackageName}.entity.$!tableInfo.name;
+
+##表注释（宏定义）
+#tableComment("表服务接口")
+public interface $!{tableName} {
+	/**
+     * 保存
+     *
+     * @param $!{tableInfo.name} $!{lowerTableName}
+     * @return the boolean
+     * @since 1.0.0
+     */
+    boolean save$!{tableInfo.name}($!{tableInfo.name} $!{lowerTableName});
+
+    /**
+     * 修改
+     *
+     * @param $!{tableInfo.name} $!{lowerTableName}
+     * @return the boolean
+     * @since 1.0.0
+     */
+    boolean update$!{tableInfo.name}($!{tableInfo.name} $!{tool.firstLowerCase($tableInfo.name)});
+
+    /**
+     * 删除
+     *
+     * @param $!{idName} $!{idName}
+     * @return the boolean
+     * @since 1.0.0
+     */
+    boolean delete$!{tableInfo.name}($!pk.shortType $!{idName});
+
+    /**
+     * 查询详情
+     *
+     * @param $!{idName} $!{idName}
+     * @return
+     */
+    $!{tableInfo.name}DTO get$!{tableInfo.name}ById($!pk.shortType $!{idName});
+
+    /**
+     * 分页获取课程
+     *
+     * @param coursePageReq course page req
+     * @return the course by page
+     * @since 1.0.0
+     */
+    IPage<CourseDTO> getCoursesByPage(CoursePageReq coursePageReq);
+}
