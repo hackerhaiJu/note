@@ -120,7 +120,42 @@ stable-diffusion-webui-rembg：非常强大的抠图功能
 
 ### 1.2.7 反推提示词插件
 
-[picobyte/stable-diffusion-webui-wd14-tagger: Labeling extension for Automatic1111's Web UI (github.com)](https://github.com/picobyte/stable-diffusion-webui-wd14-tagger)
+[picobyte/stable-diffusion-webui-wd14-tagger](https://github.com/picobyte/stable-diffusion-webui-wd14-tagger)
+
+### 1.2.8 锁定分辨比例插件
+
+[sd-webui-aspect-ratio-helper](https://github.com/thomasasfk/sd-webui-aspect-ratio-helper)，可以用来锁定宽高比拉动时一起跟着改变
+
+### 1.2.9 脸部修复插件（adetailer）
+
+[Bing-su/adetailer](https://github.com/Bing-su/adetailer)
+
+为什么会脸部崩坏？**分辨率不够**
+
+#### 模型下载
+
+需要到 [Bingsu/adetailer at main (huggingface.co)](https://huggingface.co/Bingsu/adetailer/tree/main) 下载对应修复的模型文件，将其放到 **models/adetailer** 文件夹下面，设置里面将 **adetailer** 的最大模型设置为5
+
+- 模型的组成：修复的部位_使用的算法+版本+精度
+  - 例如：face_yolov8m，修复脸部，yolo算法，版本8，m代表中型
+  - s代表小型，n代表纳米（比小型更小），m代表中型，模型越小处理越快，代价就行精度更低
+- mediapipe_face_full：只能对真人起效果
+
+- face_yolov8m.pt：修复脸部
+- face_yolov8n_v2.pt：脸部修复（推荐使用，二次元和真人都有效）
+- hand_yolov8n.pt：修复手部
+- person_yolov8m-seg.pt：增加人物整体细节的模型
+
+![image-20240322111448369](images/image-20240322111448369.png)
+
+#### 参数说明
+
+- 检测设置：用于扩大检查的范围
+  - 检查模型置信度阈值：值越小，检测范围越大
+
+### 1.2.10 controlnet插件
+
+[Mikubill/sd-webui-controlnet: WebUI extension for ControlNet (github.com)](https://github.com/Mikubill/sd-webui-controlnet)
 
 ## 1.3 资源
 
