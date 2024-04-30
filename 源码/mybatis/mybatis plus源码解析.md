@@ -2,7 +2,7 @@
 
 mybatis plus的源码以 **3.5.3** 的版本进行阅读
 
-## 1. 配置类
+## 1. Configuration
 
 mybatis plus复写了mybatis的 **Configuration** 类，**Configuration** 类将所有的配置信息都进行了保存
 
@@ -151,8 +151,6 @@ public class Configuration {
 }
 ```
 
-
-
 **MybatisConfiguration 继承至 Configuration** 新增了一些自己的逻辑注册了一些默认的处理器
 
 ```java
@@ -186,7 +184,7 @@ public class MybatisConfiguration extends Configuration {
 }
 ```
 
-## 2. 工厂类
+## 2. 解析类
 
 ### 2.1 SqlSessionFactoryBuilder
 
@@ -590,9 +588,9 @@ public void parseStatementNode() {
 
 ## 3. MapperBuilderAssistant
 
-mapper构建的助手，所有的配置以及sql在解析的时候都会通过 **MapperBuilderAssistant** 构建到 **Configuration** 类当中
+mapper构建的助手，所有的配置以及sql在解析的时候都会通过 **MapperBuilderAssistant** 构建到 **Configuration** 类当中进行存储
 
-### 构建缓存
+### 3.1 构建缓存
 
 根据配置中指定的缓存类
 
@@ -624,7 +622,7 @@ public Cache useNewCache(Class<? extends Cache> typeClass,
 
 
 
-### 构建ParameterMap
+### 3.2 构建ParameterMap
 
 构建 **ParameterMap** 将其添加到 **configuration** 当中，其中包括了多个 **ParameterMapping**
 
@@ -665,7 +663,34 @@ public ParameterMapping buildParameterMapping(
   }
 ```
 
-### 构建ReusltMap
+### 3.3 构建ReusltMap
+
+**ResultMap** 用来记录字段对应的映射信息
+
+- id
+- type：实体类的类型
+- resultMappings：每个字段的映射类型
+- idResultMappings：id映射类型
+- constructorResultMappings：构造函数
+
+```java
+public class ResultMap {
+  private Configuration configuration;
+
+  private String id;
+  private Class<?> type;
+  private List<ResultMapping> resultMappings;
+  private List<ResultMapping> idResultMappings;
+  private List<ResultMapping> constructorResultMappings;
+  private List<ResultMapping> propertyResultMappings;
+  private Set<String> mappedColumns;
+  private Set<String> mappedProperties;
+  private Discriminator discriminator;
+  private boolean hasNestedResultMaps;
+  private boolean hasNestedQueries;
+  private Boolean autoMapping;
+}
+```
 
 ```java
 public ResultMap addResultMap(
@@ -710,6 +735,38 @@ public ResultMap addResultMap(
     configuration.addResultMap(resultMap);
     return resultMap;
   }
+```
+
+**ResultMapping** 则是用来记录字段的映射类型，也就是xml中的 <property\> 标签：
+
+- property：配置的字段名称
+- column：配置的数据库对应的名称
+- javaType：java对应的类型
+- JdbcType：数据库的类型
+- typeHandler：当前字段数据类型的处理器
+- nestedResultMapId：内嵌的resultMap的id
+- nestedQueryId：内嵌查询的id
+- foreignColumn：外键的列
+- lazy：懒加载
+
+```java
+public class ResultMapping {
+  private Configuration configuration;
+  private String property;
+  private String column;
+  private Class<?> javaType;
+  private JdbcType jdbcType;
+  private TypeHandler<?> typeHandler;
+  private String nestedResultMapId;
+  private String nestedQueryId;
+  private Set<String> notNullColumns;
+  private String columnPrefix;
+  private List<ResultFlag> flags;
+  private List<ResultMapping> composites;
+  private String resultSet;
+  private String foreignColumn;
+  private boolean lazy;
+}
 ```
 
 ```java
@@ -775,7 +832,7 @@ public ResultMap addResultMap(
   }
 ```
 
-### 构建MappedStatement
+### 3.4 构建MappedStatement
 
 将sql语句进行构建成对应的实体
 
@@ -864,4 +921,1150 @@ public ResultMap addResultMap(
   }
 ```
 
-## 4. 
+## 4. MybatisPlusAutoConfiguration
+
+自动装配类没有什么特别的说 ，基本上就是将spring容器中定义好的一些插件全部读取出来设置到 **SqlSessionFactory** 类当中
+
+```java
+@Configuration(proxyBeanMethods = false)
+@ConditionalOnClass({SqlSessionFactory.class, SqlSessionFactoryBean.class})
+@ConditionalOnSingleCandidate(DataSource.class)
+@EnableConfigurationProperties(MybatisPlusProperties.class)
+@AutoConfigureAfter({DataSourceAutoConfiguration.class, MybatisPlusLanguageDriverAutoConfiguration.class})
+public class MybatisPlusAutoConfiguration implements InitializingBean {
+  /** mybatis的配置 */
+    private final MybatisPlusProperties properties;
+
+    /** 插件 */
+    private final Interceptor[] interceptors;
+
+    /** 自定义的typeHandler */
+    private final TypeHandler[] typeHandlers;
+
+    /** 语言驱动 */
+    private final LanguageDriver[] languageDrivers;
+
+    /** 资源加载器 */
+    private final ResourceLoader resourceLoader;
+
+    /** 数据库id的支撑器 */
+    private final DatabaseIdProvider databaseIdProvider;
+
+    /** 自定义的配置初始化器 */
+    private final List<ConfigurationCustomizer> configurationCustomizers;
+
+    /** SqlSessionFactoryBean的自定义器 */
+    private final List<SqlSessionFactoryBeanCustomizer> sqlSessionFactoryBeanCustomizers;
+
+    /** mybatis plus配置的自定义器 */
+    private final List<MybatisPlusPropertiesCustomizer> mybatisPlusPropertiesCustomizers;
+  
+}
+```
+
+### 4.1 MybatisSqlSessionFactoryBean
+
+替换了mybatis中的 **SqlSessionFactoryBean** 自定义了很多逻辑的实现，其中比较核心的是会更具 **GlobalConfig** 配置注入一些对实体的处理例如：MetaObjectHandler（用于注入默认的一些属性值）
+
+```java
+@Bean
+    @ConditionalOnMissingBean
+    public SqlSessionFactory sqlSessionFactory(DataSource dataSource) throws Exception {
+        // TODO 使用 MybatisSqlSessionFactoryBean 而不是 SqlSessionFactoryBean
+        MybatisSqlSessionFactoryBean factory = new MybatisSqlSessionFactoryBean();
+        //设置数据源
+        factory.setDataSource(dataSource);
+        //设置vfs虚拟文件系统
+        factory.setVfs(SpringBootVFS.class);
+        //设置mybatis配置文件的路径
+        if (StringUtils.hasText(this.properties.getConfigLocation())) {
+            factory.setConfigLocation(this.resourceLoader.getResource(this.properties.getConfigLocation()));
+        }
+        //执行ConfigurationCustomizer
+        applyConfiguration(factory);
+        //设置配置文件
+        if (this.properties.getConfigurationProperties() != null) {
+            factory.setConfigurationProperties(this.properties.getConfigurationProperties());
+        }
+        //设置容器中的拦截器
+        if (!ObjectUtils.isEmpty(this.interceptors)) {
+            factory.setPlugins(this.interceptors);
+        }
+        //设置数据库的名称
+        if (this.databaseIdProvider != null) {
+            factory.setDatabaseIdProvider(this.databaseIdProvider);
+        }
+        //设置别名的包路径
+        if (StringUtils.hasLength(this.properties.getTypeAliasesPackage())) {
+            factory.setTypeAliasesPackage(this.properties.getTypeAliasesPackage());
+        }
+        //设置别名的父类
+        if (this.properties.getTypeAliasesSuperType() != null) {
+            factory.setTypeAliasesSuperType(this.properties.getTypeAliasesSuperType());
+        }
+        //设置 TypeHandler 的包路径
+        if (StringUtils.hasLength(this.properties.getTypeHandlersPackage())) {
+            factory.setTypeHandlersPackage(this.properties.getTypeHandlersPackage());
+        }
+        //设置容器中的 TypeHandler
+        if (!ObjectUtils.isEmpty(this.typeHandlers)) {
+            factory.setTypeHandlers(this.typeHandlers);
+        }
+        //设置Mapper的路径
+        if (!ObjectUtils.isEmpty(this.properties.resolveMapperLocations())) {
+            factory.setMapperLocations(this.properties.resolveMapperLocations());
+        }
+        // TODO 修改源码支持定义 TransactionFactory
+        this.getBeanThen(TransactionFactory.class, factory::setTransactionFactory);
+
+        // 设置使用默认的语法驱动
+        Class<? extends LanguageDriver> defaultLanguageDriver = this.properties.getDefaultScriptingLanguageDriver();
+        if (!ObjectUtils.isEmpty(this.languageDrivers)) {
+            factory.setScriptingLanguageDrivers(this.languageDrivers);
+        }
+        Optional.ofNullable(defaultLanguageDriver).ifPresent(factory::setDefaultScriptingLanguageDriver);
+
+        applySqlSessionFactoryBeanCustomizers(factory);
+
+        // TODO 此处必为非 NULL
+        GlobalConfig globalConfig = this.properties.getGlobalConfig();
+        // TODO 注入填充器
+        this.getBeanThen(MetaObjectHandler.class, globalConfig::setMetaObjectHandler);
+        // TODO 注入参与器
+        this.getBeanThen(PostInitTableInfoHandler.class, globalConfig::setPostInitTableInfoHandler);
+        // TODO 注入主键生成器
+        this.getBeansThen(IKeyGenerator.class, i -> globalConfig.getDbConfig().setKeyGenerators(i));
+        // TODO 注入sql注入器
+        this.getBeanThen(ISqlInjector.class, globalConfig::setSqlInjector);
+        // TODO 注入ID生成器
+        this.getBeanThen(IdentifierGenerator.class, globalConfig::setIdentifierGenerator);
+        // TODO 设置 GlobalConfig 到 MybatisSqlSessionFactoryBean
+        factory.setGlobalConfig(globalConfig);
+        return factory.getObject();
+    }
+```
+
+### 4.2 SqlSessionTemplate
+
+**mybatis-spring** 出的用于适配spring容器来创建 **SqlSession** 模板构建器
+
+```java
+@Bean
+@ConditionalOnMissingBean
+public SqlSessionTemplate sqlSessionTemplate(SqlSessionFactory sqlSessionFactory) {
+    ExecutorType executorType = this.properties.getExecutorType();
+    if (executorType != null) {
+        return new SqlSessionTemplate(sqlSessionFactory, executorType);
+    } else {
+        return new SqlSessionTemplate(sqlSessionFactory);
+    }
+}
+```
+
+### 4.3 AutoConfiguredMapperScannerRegistrar
+
+用于定义扫描 **@Mapper** 注解标识的接口类，实际注入的类是 **MapperScannerConfigurer** 
+
+```java
+public static class AutoConfiguredMapperScannerRegistrar
+        implements BeanFactoryAware, EnvironmentAware, ImportBeanDefinitionRegistrar {
+  
+  @Override
+        public void registerBeanDefinitions(AnnotationMetadata importingClassMetadata, BeanDefinitionRegistry registry) {
+
+            if (!AutoConfigurationPackages.has(this.beanFactory)) {
+                logger.debug("Could not determine auto-configuration package, automatic mapper scanning disabled.");
+                return;
+            }
+
+            logger.debug("Searching for mappers annotated with @Mapper");
+
+            List<String> packages = AutoConfigurationPackages.get(this.beanFactory);
+            if (logger.isDebugEnabled()) {
+                packages.forEach(pkg -> logger.debug("Using auto-configuration base package '{}'", pkg));
+            }
+
+            BeanDefinitionBuilder builder = BeanDefinitionBuilder.genericBeanDefinition(MapperScannerConfigurer.class);
+            builder.addPropertyValue("processPropertyPlaceHolders", true);
+            builder.addPropertyValue("annotationClass", Mapper.class);
+            builder.addPropertyValue("basePackage", StringUtils.collectionToCommaDelimitedString(packages));
+            BeanWrapper beanWrapper = new BeanWrapperImpl(MapperScannerConfigurer.class);
+            Set<String> propertyNames = Stream.of(beanWrapper.getPropertyDescriptors()).map(PropertyDescriptor::getName)
+                .collect(Collectors.toSet());
+            if (propertyNames.contains("lazyInitialization")) {
+                // Need to mybatis-spring 2.0.2+
+                // TODO 兼容了mybatis.lazy-initialization配置
+                builder.addPropertyValue("lazyInitialization", "${mybatis-plus.lazy-initialization:${mybatis.lazy-initialization:false}}");
+            }
+            if (propertyNames.contains("defaultScope")) {
+                // Need to mybatis-spring 2.0.6+
+                builder.addPropertyValue("defaultScope", "${mybatis-plus.mapper-default-scope:}");
+            }
+
+            // for spring-native
+            boolean injectSqlSession = environment.getProperty("mybatis.inject-sql-session-on-mapper-scan", Boolean.class,
+                Boolean.TRUE);
+            if (injectSqlSession && this.beanFactory instanceof ListableBeanFactory) {
+                ListableBeanFactory listableBeanFactory = (ListableBeanFactory) this.beanFactory;
+                Optional<String> sqlSessionTemplateBeanName = Optional
+                    .ofNullable(getBeanNameForType(SqlSessionTemplate.class, listableBeanFactory));
+                Optional<String> sqlSessionFactoryBeanName = Optional
+                    .ofNullable(getBeanNameForType(SqlSessionFactory.class, listableBeanFactory));
+                if (sqlSessionTemplateBeanName.isPresent() || !sqlSessionFactoryBeanName.isPresent()) {
+                    builder.addPropertyValue("sqlSessionTemplateBeanName",
+                        sqlSessionTemplateBeanName.orElse("sqlSessionTemplate"));
+                } else {
+                    builder.addPropertyValue("sqlSessionFactoryBeanName", sqlSessionFactoryBeanName.get());
+                }
+            }
+            builder.setRole(BeanDefinition.ROLE_INFRASTRUCTURE);
+
+            registry.registerBeanDefinition(MapperScannerConfigurer.class.getName(), builder.getBeanDefinition());
+        }
+
+
+}
+```
+
+**MapperScannerConfigurer** 定义了扫描类 **ClassPathMapperScanner** 用于扫描对应的 @Mapper 注解的标识类，其中内部用到了 **MapperFactoryBean** 来作为动态代理的生成
+
+```java
+public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) {
+        if (this.processPropertyPlaceHolders) {
+            this.processPropertyPlaceHolders();
+        }
+
+        ClassPathMapperScanner scanner = new ClassPathMapperScanner(registry);
+        scanner.setAddToConfig(this.addToConfig);
+        scanner.setAnnotationClass(this.annotationClass);
+        scanner.setMarkerInterface(this.markerInterface);
+        scanner.setSqlSessionFactory(this.sqlSessionFactory);
+        scanner.setSqlSessionTemplate(this.sqlSessionTemplate);
+        scanner.setSqlSessionFactoryBeanName(this.sqlSessionFactoryBeanName);
+        scanner.setSqlSessionTemplateBeanName(this.sqlSessionTemplateBeanName);
+        scanner.setResourceLoader(this.applicationContext);
+        scanner.setBeanNameGenerator(this.nameGenerator);
+        scanner.setMapperFactoryBeanClass(this.mapperFactoryBeanClass);
+        if (StringUtils.hasText(this.lazyInitialization)) {
+            scanner.setLazyInitialization(Boolean.valueOf(this.lazyInitialization));
+        }
+
+        if (StringUtils.hasText(this.defaultScope)) {
+            scanner.setDefaultScope(this.defaultScope);
+        }
+
+        scanner.registerFilters();
+        scanner.scan(StringUtils.tokenizeToStringArray(this.basePackage, ",; \t\n"));
+    }
+```
+
+
+
+
+
+### 4.4 MapperScannerRegistrarNotFoundConfiguration
+
+用于导入 **AutoConfiguredMapperScannerRegistrar** 扫描类，用于扫描**Mapper** 接口
+
+```java
+@org.springframework.context.annotation.Configuration
+    @Import(AutoConfiguredMapperScannerRegistrar.class)
+    @ConditionalOnMissingBean({MapperFactoryBean.class, MapperScannerConfigurer.class})
+    public static class MapperScannerRegistrarNotFoundConfiguration implements InitializingBean {
+
+        @Override
+        public void afterPropertiesSet() {
+            logger.debug(
+                "Not found configuration for registering mapper bean using @MapperScan, MapperFactoryBean and MapperScannerConfigurer.");
+        }
+    }
+```
+
+## 5. 动态代理
+
+目前mybatis用到的动态代理类是 **MapperFactoryBean** 这个类型，在spring扫描是就会将对应的**@Mapper**标识的接口类替换为 **MapperFactoryBean**
+
+### 5.1 MapperFactoryBean
+
+![image-20240415150723811](images/image-20240415150723811.png)
+
+mybatis使用的是动态代理创建接口对象，然后通过 **SqlSessionTemplate** 将对应的代理对象添加到 **Configuration**中，在使用的时候通过 **getObject()** 方法获取到代理对象来进行处理
+
+```java
+public class MapperFactoryBean<T> extends SqlSessionDaoSupport implements FactoryBean<T> {
+  
+  protected void checkDaoConfig() {
+    super.checkDaoConfig();
+
+    notNull(this.mapperInterface, "Property 'mapperInterface' is required");
+
+    Configuration configuration = getSqlSession().getConfiguration();
+    if (this.addToConfig && !configuration.hasMapper(this.mapperInterface)) {
+      try {
+        //在配置类中添加 @Mapper标识的类，在Configuration中添加MapperProxyFactory，在使用时通过MapperProxyFactory创建代理对象
+        configuration.addMapper(this.mapperInterface);
+      } catch (Exception e) {
+        logger.error("Error while adding the mapper '" + this.mapperInterface + "' to configuration.", e);
+        throw new IllegalArgumentException(e);
+      } finally {
+        ErrorContext.instance().reset();
+      }
+    }
+  }
+  
+  @Override
+  public T getObject() throws Exception {
+    //获取代理对象时，通过 SqlSessionTemplate来调用 MybatisConfiguration对象获取 Mapper的代理对象
+    return getSqlSession().getMapper(this.mapperInterface);
+  }
+  
+}
+```
+
+#### 5.1.1 DaoSupport
+
+顶层的抽象类，在代理类被扫描到进行初始化时，就会调用 **checkDaoConfig()** 方法，具体的实现交给子类
+
+```java
+public abstract class DaoSupport implements InitializingBean {
+  @Override
+	public final void afterPropertiesSet() throws IllegalArgumentException, BeanInitializationException {
+		// Let abstract subclasses check their configuration.
+		checkDaoConfig();
+
+		// Let concrete implementations initialize themselves.
+		try {
+			initDao();
+		}
+		catch (Exception ex) {
+			throw new BeanInitializationException("Initialization of DAO failed", ex);
+		}
+	}
+  
+}
+```
+
+#### 5.1.2 SqlSessionDaoSupport
+
+核心是通过 **SqlSessionTemplate** 创建 **SqlSession** 进行处理调用
+
+```java
+public abstract class SqlSessionDaoSupport extends DaoSupport {
+
+  private SqlSession sqlSession;
+
+  private boolean externalSqlSession;
+
+  public void setSqlSessionFactory(SqlSessionFactory sqlSessionFactory) {
+    //如果没有设置对应的 SqlSessionTemplate，那么创建一个新的
+    if (!this.externalSqlSession) {
+      this.sqlSession = new SqlSessionTemplate(sqlSessionFactory);
+    }
+  }
+
+  public void setSqlSessionTemplate(SqlSessionTemplate sqlSessionTemplate) {
+    this.sqlSession = sqlSessionTemplate;
+    this.externalSqlSession = true;
+  }
+
+  /**
+   * 获取到当前的 SqlSession
+   */
+  public SqlSession getSqlSession() {
+    return this.sqlSession;
+  }
+
+  /**
+   * 检查dao的配置
+   */
+  @Override
+  protected void checkDaoConfig() {
+    notNull(this.sqlSession, "Property 'sqlSessionFactory' or 'sqlSessionTemplate' are required");
+  }
+
+}
+```
+
+
+
+#### 5.1.3 SqlSessionTemplate
+
+**SqlSessionTemplate**实现了 **SqlSession** 的接口，然后在内部通过动态代理又创建了一个内部的 **SqlSession** 来进行处理对应的调用逻辑，最终执行的是通过 **sqlSessionProxy** 代理类来进行处理，默认使用的是 **SqlSessionInterceptor**
+
+```java
+public class SqlSessionTemplate implements SqlSession, DisposableBean {
+
+  private final SqlSessionFactory sqlSessionFactory;
+
+  private final ExecutorType executorType;
+
+  private final SqlSession sqlSessionProxy;
+
+  private final PersistenceExceptionTranslator exceptionTranslator;
+  
+  public SqlSessionTemplate(SqlSessionFactory sqlSessionFactory, ExecutorType executorType,
+      PersistenceExceptionTranslator exceptionTranslator) {
+
+    notNull(sqlSessionFactory, "Property 'sqlSessionFactory' is required");
+    notNull(executorType, "Property 'executorType' is required");
+
+    this.sqlSessionFactory = sqlSessionFactory;
+    this.executorType = executorType;
+    this.exceptionTranslator = exceptionTranslator;
+    this.sqlSessionProxy = (SqlSession) newProxyInstance(
+        SqlSessionFactory.class.getClassLoader(),
+        new Class[] { SqlSession.class },
+        new SqlSessionInterceptor());
+  }
+}
+```
+
+#### 5.1.4 SqlSessionInterceptor
+
+**SqlSessionInterceptor** 最终的动态代理执行逻辑，先从事务管理器中获取对应的 **SqlSession** 会话，确保同一个线程使用的是同一个会话，如果没有的话就通过 **sqlSessionFactory** 创建一个新的会话进行操作
+
+```java
+private class SqlSessionInterceptor implements InvocationHandler {
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+      //获取到对应的会话 默认是 DefaultSqlSession
+      SqlSession sqlSession = getSqlSession(
+          SqlSessionTemplate.this.sqlSessionFactory,
+          SqlSessionTemplate.this.executorType,
+          SqlSessionTemplate.this.exceptionTranslator);
+      try {
+        //通过方法直接调用 DefaultSqlSession
+        Object result = method.invoke(sqlSession, args);
+        //判断是否开启了事务，强制提交事务
+        if (!isSqlSessionTransactional(sqlSession, SqlSessionTemplate.this.sqlSessionFactory)) {
+          // 提交事务
+          sqlSession.commit(true);
+        }
+        return result;
+      } catch (Throwable t) {
+        Throwable unwrapped = unwrapThrowable(t);
+        if (SqlSessionTemplate.this.exceptionTranslator != null && unwrapped instanceof PersistenceException) {
+          //关闭session，以及事务然后进行释放对应的资源
+          closeSqlSession(sqlSession, SqlSessionTemplate.this.sqlSessionFactory);
+          sqlSession = null;
+          Throwable translated = SqlSessionTemplate.this.exceptionTranslator.translateExceptionIfPossible((PersistenceException) unwrapped);
+          if (translated != null) {
+            unwrapped = translated;
+          }
+        }
+        throw unwrapped;
+      } finally {
+        if (sqlSession != null) {
+          closeSqlSession(sqlSession, SqlSessionTemplate.this.sqlSessionFactory);
+        }
+      }
+    }
+  }
+
+public static SqlSession getSqlSession(SqlSessionFactory sessionFactory, ExecutorType executorType, PersistenceExceptionTranslator exceptionTranslator) {
+
+    notNull(sessionFactory, NO_SQL_SESSION_FACTORY_SPECIFIED);
+    notNull(executorType, NO_EXECUTOR_TYPE_SPECIFIED);
+		
+  //先通过事务管理器来获取对应的 SqlSessionHolder，确保事务使用的是通过Session
+    SqlSessionHolder holder = (SqlSessionHolder) TransactionSynchronizationManager.getResource(sessionFactory);
+		//从持有器中获取到 SqlSession
+    SqlSession session = sessionHolder(executorType, holder);
+    if (session != null) {
+      return session;
+    }
+
+    if (LOGGER.isDebugEnabled()) {
+      LOGGER.debug("Creating a new SqlSession");
+    }
+		//如果没有对应的SqlSession，那么直接开启一个新的会话
+    session = sessionFactory.openSession(executorType);
+		//注册到事务管理器中
+    registerSessionHolder(sessionFactory, executorType, exceptionTranslator, session);
+
+    return session;
+  }
+```
+
+#### 5.1.5 创建流程
+
+容器启动时，所有的 **@Mapper** 标识的接口都会被替换为 **MapperFactoryBean.class** 而**MapperFactoryBean.class** 需要依赖 **SqlSessionTemplate** 来创建对应的 **SqlSession** 类来进行处理
+
+### 5.6 MapperProxyFactory与MybatisMapperProxyFactory
+
+所有的 **@Mapper** 进行创建的工厂类，通过工厂类来进行创建，两个类都是一样的功能，只是创建的代理对象不同
+
+- MapperProxyFactory：mybatis提供的创建类，创建的代理类为 **MapperProxy**
+- MybatisMapperProxyFactory：mybatis plus提供的工厂类，创建代理类为 **MybatisMapperProxy**
+
+```java
+public T newInstance(SqlSession sqlSession) {
+    final MapperProxy<T> mapperProxy = new MapperProxy<T>(sqlSession, mapperInterface, methodCache);
+    return newInstance(mapperProxy);
+  }
+```
+
+
+
+### 5.7 MybatisMapperProxy与MapperProxy
+
+**Mapper** 接口的动态代理的接口，也是最终会进行调用执行的类，默认使用 **PlainMethodInvoker**
+
+- MybatisMapperProxy：mybatis plus提供的代理类
+- MapperProxy：mybatis提供的类
+
+```java
+private MapperMethodInvoker cachedInvoker(Method method) throws Throwable {
+        try {
+            return CollectionUtils.computeIfAbsent(methodCache, method, m -> {
+                if (m.isDefault()) {
+                    try {
+                        if (privateLookupInMethod == null) {
+                            return new DefaultMethodInvoker(getMethodHandleJava8(method));
+                        } else {
+                            return new DefaultMethodInvoker(getMethodHandleJava9(method));
+                        }
+                    } catch (IllegalAccessException | InstantiationException | InvocationTargetException
+                        | NoSuchMethodException e) {
+                        throw new RuntimeException(e);
+                    }
+                } else {
+                  //通过 PlainMethodInvoker 进行调用
+                    return new PlainMethodInvoker(new MybatisMapperMethod(mapperInterface, method, sqlSession.getConfiguration()));
+                }
+            });
+        } catch (RuntimeException re) {
+            Throwable cause = re.getCause();
+            throw cause == null ? re : cause;
+        }
+    }
+```
+
+### 5.8 调用逻辑
+
+![mapper调用流程](images/mapper调用流程.svg)
+
+
+
+
+
+
+
+
+
+## 6. MybatisMapperRegistry
+
+Mybatis plus复写的 **MapperRegistry**，用于记录 **@Mapper** 的动态代理注册工厂
+
+### 6.1 获取Mapper
+
+业务在执行的时候通过注册工厂去获取到对应的接口代理对象工厂然后进行创建
+
+```java
+public <T> T getMapper(Class<T> type, SqlSession sqlSession) {
+        // TODO 这里换成 MybatisMapperProxyFactory 而不是 MapperProxyFactory
+        // fix https://github.com/baomidou/mybatis-plus/issues/4247
+        MybatisMapperProxyFactory<T> mapperProxyFactory = (MybatisMapperProxyFactory<T>) knownMappers.get(type);
+        if (mapperProxyFactory == null) {
+            mapperProxyFactory = (MybatisMapperProxyFactory<T>) knownMappers.entrySet().stream()
+                .filter(t -> t.getKey().getName().equals(type.getName())).findFirst().map(Map.Entry::getValue)
+                .orElseThrow(() -> new BindingException("Type " + type + " is not known to the MybatisPlusMapperRegistry."));
+        }
+        try {
+            return mapperProxyFactory.newInstance(sqlSession);
+        } catch (Exception e) {
+            throw new BindingException("Error getting mapper instance. Cause: " + e, e);
+        }
+    }
+```
+
+### 6.2 添加Mapper
+
+**MybatisMapperRegistry** 跟 mybatis 的 **MapperRegistry** 在添加 Mapper时采用的对象不一样，mybatis plus在添加Mapper对象是会解析自己的逻辑，使用的是 **MybatisMapperAnnotationBuilder**
+
+```java
+public <T> void addMapper(Class<T> type) {
+        if (type.isInterface()) {
+            if (hasMapper(type)) {
+                // TODO 如果之前注入 直接返回
+                return;
+            }
+            boolean loadCompleted = false;
+            try {
+                // TODO 这里也换成 MybatisMapperProxyFactory 而不是 MapperProxyFactory
+                knownMappers.put(type, new MybatisMapperProxyFactory<>(type));
+                // TODO 这里也换成 MybatisMapperAnnotationBuilder 而不是 MapperAnnotationBuilder
+                MybatisMapperAnnotationBuilder parser = new MybatisMapperAnnotationBuilder(config, type);
+                parser.parse();
+                loadCompleted = true;
+            } finally {
+                if (!loadCompleted) {
+                    knownMappers.remove(type);
+                }
+            }
+        }
+    }
+```
+
+解析 @Mapper 标识的接口中的注解以及方法的注入
+
+```java
+public void parse() {
+        String resource = type.toString();
+        //判断xml文件是否被加载了
+        if (!configuration.isResourceLoaded(resource)) {
+            //加载对应的xml
+            loadXmlResource();
+            configuration.addLoadedResource(resource);
+            //设置当前命名空间
+            String mapperName = type.getName();
+            assistant.setCurrentNamespace(mapperName);
+            //解析class对应的缓存，解析 @CacheNamespace
+            parseCache();
+            //解析@CacheNamespaceRef
+            parseCacheRef();
+            //解析 @InterceptorIgnore 注解信息，根据配置信息来判断需要根据那些数据进行忽略
+            IgnoreStrategy ignoreStrategy = InterceptorIgnoreHelper.initSqlParserInfoCache(type);
+            for (Method method : type.getMethods()) {
+                if (!canHaveStatement(method)) {
+                    continue;
+                }
+                if (getAnnotationWrapper(method, false, Select.class, SelectProvider.class).isPresent()
+                    && method.getAnnotation(ResultMap.class) == null) {
+                    parseResultMap(method);
+                }
+                try {
+                    // 有限使用方法上面的 @InterceptorIgnore 配置
+                    InterceptorIgnoreHelper.initSqlParserInfoCache(ignoreStrategy, mapperName, method);
+                    /**
+                     * 解析以下注解：
+                     * 1. @Options：参数信息
+                     * 2. @SelectKey
+                     * 3. @ResultMap：解析需要使用的 ResultMap 的id
+                     */
+                    parseStatement(method);
+                } catch (IncompleteElementException e) {
+                    // TODO 使用 MybatisMethodResolver 而不是 MethodResolver
+                    configuration.addIncompleteMethod(new MybatisMethodResolver(this, method));
+                }
+            }
+            // TODO 注入 CURD 动态 SQL , 放在在最后, because 可能会有人会用注解重写sql
+            try {
+                // https://github.com/baomidou/mybatis-plus/issues/3038
+                if (GlobalConfigUtils.isSupperMapperChildren(configuration, type)) {
+                    /**
+                     * 解析接口是 Mapper 的子接口时需要注入CRUD方法
+                     * 使用 ISqlInjector 接口来进行注入，AbstractSqlInjector
+                     */
+                    parserInjector();
+                }
+            } catch (IncompleteElementException e) {
+                configuration.addIncompleteMethod(new InjectorResolver(this));
+            }
+        }
+        parsePendingMethods();
+    }
+```
+
+### 6.3 动态SQL注入
+
+当mapper接口是 Mapper.class 的实现子类是，需要通过 spring 容器注入的 **ISqlInjector** 来进行动态方法的注入，mybatis plus使用的默认方法是 **DefaultSqlInjector**，其中根据方法名称注入了动态的方法名称，如果想要自己注入动态sql，可以继承 **DefaultSqlInjector** 然后复写 **getMethodList()**
+
+```java
+public class DefaultSqlInjector extends AbstractSqlInjector {
+
+    @Override
+    public List<AbstractMethod> getMethodList(Class<?> mapperClass, TableInfo tableInfo) {
+        Stream.Builder<AbstractMethod> builder = Stream.<AbstractMethod>builder()
+            .add(new Insert())
+            .add(new Delete())
+            .add(new DeleteByMap())
+            .add(new Update())
+            .add(new SelectByMap())
+            .add(new SelectCount())
+            .add(new SelectMaps())
+            .add(new SelectMapsPage())
+            .add(new SelectObjs())
+            .add(new SelectList())
+            .add(new SelectPage());
+        if (tableInfo.havePK()) {
+            builder.add(new DeleteById())
+                .add(new DeleteBatchByIds())
+                .add(new UpdateById())
+                .add(new SelectById())
+                .add(new SelectBatchByIds());
+        } else {
+            logger.warn(String.format("%s ,Not found @TableId annotation, Cannot use Mybatis-Plus 'xxById' Method.",
+                tableInfo.getEntityType()));
+        }
+        return builder.build().collect(toList());
+    }
+}
+```
+
+**AbstractSqlInjector.inspectInject()** 负责逻辑的处理，具体的动态sql注入的逻辑参考 **AbstractMethod** ，其中又主要分为了 **TableInfo** 和 **List<AbstractMethod\>** 的执行
+
+```java
+public abstract class AbstractSqlInjector implements ISqlInjector {
+
+    protected final Log logger = LogFactory.getLog(this.getClass());
+
+    @Override
+    public void inspectInject(MapperBuilderAssistant builderAssistant, Class<?> mapperClass) {
+        Class<?> modelClass = ReflectionKit.getSuperClassGenericType(mapperClass, Mapper.class, 0);
+        if (modelClass != null) {
+            String className = mapperClass.toString();
+            Set<String> mapperRegistryCache = GlobalConfigUtils.getMapperRegistryCache(builderAssistant.getConfiguration());
+            if (!mapperRegistryCache.contains(className)) {
+                /**
+                 * 1. 初始化 @TableName 注解，包括表名、是否自动映射
+                 * 2. 处理 @TableId、 @TableLogic 、@OrderBy、@TableField 等注解添加到 TableInfo 对象中
+                 * 3. 根据 @TableName 中配置的自动映射，然后将@TableField 构建ResultMap和ResultMapping对象
+                 */
+                TableInfo tableInfo = TableInfoHelper.initTableInfo(builderAssistant, modelClass);
+                /**
+                 * 通过 DefaultSqlInjector 获取到自动注入 BaseMapper 中定义的方法
+                 * 例如：SelectList方法，mybatis plus 会进行动态构建sql，将sql构建为 SqlSource,然后将SqlSource添加到Configuration中
+                 * mybatis plus QueryWrapper 会将查询条件封装到一个叫 ew.sqlSegment 的字段中，然后在执行sql的时候，会将这个字段的值动态拼接到sql中
+                 */
+                List<AbstractMethod> methodList = this.getMethodList(mapperClass, tableInfo);
+                if (CollectionUtils.isNotEmpty(methodList)) {
+                    // 循环注入自定义方法
+                    methodList.forEach(m -> m.inject(builderAssistant, mapperClass, modelClass, tableInfo));
+                } else {
+                    logger.debug(mapperClass.toString() + ", No effective injection method was found.");
+                }
+                mapperRegistryCache.add(className);
+            }
+        }
+    }
+
+    /**
+     * <p>
+     * 获取 注入的方法
+     * </p>
+     *
+     * @param mapperClass 当前mapper
+     * @return 注入的方法集合
+     * @since 3.1.2 add  mapperClass
+     */
+    public abstract List<AbstractMethod> getMethodList(Class<?> mapperClass,TableInfo tableInfo);
+
+}
+```
+
+**TableInfo** 实体类比较核心的属性
+
+- 配置主键的类型 **IdType**
+- 表字段信息：**fieldList** 
+- 逻辑删除字段信息：**logicDeleteFieldInfo** 
+- 排序字段的列表：**orderByFields**
+
+```java
+TableInfo tableInfo = TableInfoHelper.initTableInfo(builderAssistant, modelClass);
+```
+
+**注意：@@TableField注解中配置的 TypeHandler 只有在 @TableName 中标识了 autoResultMap 才会生效**
+
+```java
+private synchronized static TableInfo initTableInfo(Configuration configuration, String currentNamespace, Class<?> clazz) {
+        /* 没有获取到缓存信息,则初始化 */
+        TableInfo tableInfo = new TableInfo(configuration, clazz);
+        tableInfo.setCurrentNamespace(currentNamespace);
+        GlobalConfig globalConfig = GlobalConfigUtils.getGlobalConfig(configuration);
+
+        /**
+         * 1. 处理 @TableName 注解配置的表名
+         * 2. 处理 @TableName 配置的需要排除的字段
+         * 3. 处理 @KeySequence 自定义id生成器
+         */
+        final String[] excludeProperty = initTableName(clazz, globalConfig, tableInfo);
+
+        List<String> excludePropertyList = excludeProperty != null && excludeProperty.length > 0 ? Arrays.asList(excludeProperty) : Collections.emptyList();
+
+        /**
+         * 1. 初始化 @TableId 标识的字段
+         * 2. 初始化 @OrderBy 标识的字段
+         * 3. 初始化 @TableField 标识的字段，创建 TableFieldInfo 类型，包含了字段的填充策略等信息
+         */
+        initTableFields(configuration, clazz, globalConfig, tableInfo, excludePropertyList);
+
+        //是否需要自动构建 resultMap，如果填写了 true，那么会根据fieldList标识的字段信息来构建 ResultMapping，这样 @TableField 标识的 TypeHandler 才会生效
+        tableInfo.initResultMapIfNeed();
+        globalConfig.getPostInitTableInfoHandler().postTableInfo(tableInfo, configuration);
+        TABLE_INFO_CACHE.put(clazz, tableInfo);
+        TABLE_NAME_INFO_CACHE.put(tableInfo.getTableName(), tableInfo);
+
+        /* 缓存 lambda */
+        LambdaUtils.installCache(tableInfo);
+        return tableInfo;
+    }
+```
+
+
+
+### 6.4 动态SQL注入的流程
+
+构建对应的sql信息，然后添加对应的 **MappedStatement** 到 **Configuration**
+
+```java
+public class SelectList extends AbstractMethod {
+
+    public SelectList() {
+        this(SqlMethod.SELECT_LIST.getMethod());
+    }
+
+    /**
+     * @param name 方法名
+     * @since 3.5.0
+     */
+    public SelectList(String name) {
+        super(name);
+    }
+
+    @Override
+    public MappedStatement injectMappedStatement(Class<?> mapperClass, Class<?> modelClass, TableInfo tableInfo) {
+        SqlMethod sqlMethod = SqlMethod.SELECT_LIST;
+        /**
+         * tableInfo：实体类对应的表信息
+         * 1. sqlMethod.getSql(): 模板的sql
+         * 2. sqlSelectColumns(tableInfo, true)：需要查询的字段，会根据实体类的字段名称进行生成查询字段
+         * 3. tableInfo.getTableName()：表名
+         * 4. sqlWhereEntityWrapper(true, tableInfo)：where条件，会根据实体类的字段名称进行生成查询条件，其中的条件是mybatis的语法，例如：if条件等
+         * 5. sqlOrderBy(tableInfo)：排序字段
+         */
+        String sql = String.format(sqlMethod.getSql(), sqlFirst(), sqlSelectColumns(tableInfo, true), tableInfo.getTableName(),
+            sqlWhereEntityWrapper(true, tableInfo), sqlOrderBy(tableInfo), sqlComment());
+        //通过驱动创建sqlSource
+        SqlSource sqlSource = languageDriver.createSqlSource(configuration, sql, modelClass);
+        //创建一个MappedStatement对象，用于执行sql
+        return this.addSelectMappedStatementForTable(mapperClass, methodName, sqlSource, tableInfo);
+    }
+}
+```
+
+
+
+## 7. 执行流程
+
+整个mybatis plus的调用流程以 **selectList()** 方法为例子
+
+### 7.1 SqlSessionTemplate
+
+获取到实际的代理对象，mybatis plus返回的是 **MybatisMapperProxy**
+
+```java
+public T getObject() throws Exception {
+  return getSqlSession().getMapper(this.mapperInterface);
+}
+```
+
+代理类中调用的是 **cachedInvoker(method).invoke(proxy, method, args, sqlSession);** 执行器是 **PlainMethodInvoker**，最终调用的方法是 **MybatisMapperMethod**
+
+```java
+public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+    try {
+        if (Object.class.equals(method.getDeclaringClass())) {
+            return method.invoke(this, args);
+        } else {
+            return cachedInvoker(method).invoke(proxy, method, args, sqlSession);
+        }
+    } catch (Throwable t) {
+        throw ExceptionUtil.unwrapThrowable(t);
+    }
+}
+```
+
+### 7.2 MybatisMapperMethod
+
+```java
+public class MybatisMapperMethod {
+    //标记的是sql类型
+    private final MapperMethod.SqlCommand command;
+
+    //方法的签名，包含的属性就是入参和出参的类型
+    private final MapperMethod.MethodSignature method;
+
+    public MybatisMapperMethod(Class<?> mapperInterface, Method method, Configuration config) {
+        this.command = new MapperMethod.SqlCommand(config, mapperInterface, method);
+        /**
+         * 1. 解析方法的返回值类型
+         * 2. 判断返回的类型是否是集合
+         * 3. 判断返回的类型是否是 Cursor、Optional
+         * 4. 获取到 RowBounds 在参数中的索引位置
+         * 5. 获取到 ResultHandler 在参数中的位置
+         * 6. 通过 ParamNameResolver 解析@Param注解，获取到参数在参数列表中的索引位置，存储的是Map<Int, 参数的名称>
+         */
+        this.method = new MapperMethod.MethodSignature(config, mapperInterface, method);
+    }
+}
+```
+
+执行方法，mybatis plus适配了一下 IPage 类型的处理
+
+- convertArgsToSqlCommandParam()：根据@Param的参数来包装一层参数
+- rowCountResult()：转换返回的影响的类型
+
+```java
+public Object execute(SqlSession sqlSession, Object[] args) {
+        Object result;
+        //根据sql类型执行不同的操作
+        switch (command.getType()) {
+            case INSERT: {
+                //包装一层参数
+                Object param = method.convertArgsToSqlCommandParam(args);
+                //根据插入的返回转换为对应的类型，插入、修改、删除都是相同的操作
+                result = rowCountResult(sqlSession.insert(command.getName(), param));
+                break;
+            }
+            case SELECT:
+                if (method.returnsVoid() && method.hasResultHandler()) {
+                    executeWithResultHandler(sqlSession, args);
+                    result = null;
+                } else if (method.returnsMany()) { //返回的是collection集合
+                    result = executeForMany(sqlSession, args);
+                } else if (method.returnsMap()) { //返回的是Map集合
+                    result = executeForMap(sqlSession, args);
+                } else if (method.returnsCursor()) { //返回的是Cursor
+                    result = executeForCursor(sqlSession, args);
+                } else {
+                    // 如果是返回的IPage类型
+                    if (IPage.class.isAssignableFrom(method.getReturnType())) {
+                        //查询 IPage类型
+                        result = executeForIPage(sqlSession, args);
+                    } else {
+                        Object param = method.convertArgsToSqlCommandParam(args);
+                        //查询一条数据
+                        result = sqlSession.selectOne(command.getName(), param);
+                        if (method.returnsOptional()
+                            && (result == null || !method.getReturnType().equals(result.getClass()))) {
+                            result = Optional.ofNullable(result);
+                        }
+                    }
+                }
+                break;
+            case FLUSH:
+                result = sqlSession.flushStatements();
+                break;
+            default:
+                throw new BindingException("Unknown execution method for: " + command.getName());
+        }
+        return result;
+    }
+```
+
+最终调用的还是 **sqlSession.selectList()** 查询
+
+```java
+private <E> Object executeForIPage(SqlSession sqlSession, Object[] args) {
+        IPage<E> result = null;
+        for (Object arg : args) {
+            if (arg instanceof IPage) {
+                result = (IPage<E>) arg;
+                break;
+            }
+        }
+        Assert.notNull(result, "can't found IPage for args!");
+        Object param = method.convertArgsToSqlCommandParam(args);
+        List<E> list = sqlSession.selectList(command.getName(), param);
+        result.setRecords(list);
+        return result;
+    }
+```
+
+### 7.3 DefaultSqlSession
+
+- 先从配置中获取到 **MappedStatement** sql的映射实体类
+- 再通过执行器执行，这里的 executor 是从 **DefaultSqlSessionFactory** 进行创建的，在创建时是通过 **MybatisConfiguration** 进行创建，如果配置有插件会返回 **代理类（Interceptor）**； Executor分为了3种类型，如果不配置执行器这里直接返回的默认
+  - BatchExecutor：批量执行
+  - ReuseExecutor：可重复使用执行器
+  - SimpleExecutor：基础的执行器（默认）
+  - CachingExecutor：带缓存的执行器
+
+```java
+private <E> List<E> selectList(String statement, Object parameter, RowBounds rowBounds, ResultHandler handler) {
+    try {
+      MappedStatement ms = configuration.getMappedStatement(statement);
+      return executor.query(ms, wrapCollection(parameter), rowBounds, handler);
+    } catch (Exception e) {
+      
+    } finally {
+      ErrorContext.instance().reset();
+    }
+  }
+```
+
+- configuration.newStatementHandler()：创建处理器，**StatementHandler** ，这个处理器有4种，通过 **Configuration** 进行创建处理器，依旧是，如果配置有插件会返回 **代理类（Interceptor）**
+  - RoutingStatementHandler：最外层的处理器，也是第一步调入进来的
+  - SimpleStatementHandler：基础的处理器
+  - PreparedStatementHandler：预处理器的处理器，也是默认的
+  - CallableStatementHandler：可执行数据库存储过程的处理器
+
+```java
+public <E> List<E> query(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler) throws SQLException {
+  //创建BoundSql，这里创建BoundSql时会根据sql进行解析，并且根据#{}配置的属性构建ParameterMapping
+    BoundSql boundSql = ms.getBoundSql(parameter);
+    CacheKey key = createCacheKey(ms, parameter, rowBounds, boundSql);
+    return query(ms, parameter, rowBounds, resultHandler, key, boundSql);
+ }
+```
+
+```java
+public <E> List<E> doQuery(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) throws SQLException {
+    Statement stmt = null;
+    try {
+      Configuration configuration = ms.getConfiguration();
+      StatementHandler handler = configuration.newStatementHandler(wrapper, ms, parameter, rowBounds, resultHandler, boundSql);
+      stmt = prepareStatement(handler, ms.getStatementLog());
+      return handler.query(stmt, resultHandler);
+    } finally {
+      closeStatement(stmt);
+    }
+  }
+```
+
+- 第一步先获取到连接通过事务进行创建，这里的事务管理器如果是spring工程，应该是使用的 **SpringManagedTransaction**
+- 第二步通过handler来创建预处理器，也就是通过 **PreparedStatementHandler** 创建 **Statement**
+- 第三步handler来设置参数，通过 **MybatisParameterHandler** 进行设置参数
+
+```java
+private Statement prepareStatement(StatementHandler handler, Log statementLog) throws SQLException {
+  Statement stmt;
+  Connection connection = getConnection(statementLog);
+  stmt = handler.prepare(connection, transaction.getTimeout());
+  handler.parameterize(stmt);
+  return stmt;
+}
+```
+
+
+
+### 7.4 StatementHandler
+
+所有的 **StatementHandler** 都继承至于 **BaseStatementHandler** 
+
+- RoutingStatementHandler：最外层的处理器，也是第一步调入进来的
+- SimpleStatementHandler：基础的处理器
+- PreparedStatementHandler：预处理器的处理器，也是默认的
+- CallableStatementHandler：可执行数据库存储过程的处理器
+
+```java
+protected BaseStatementHandler(Executor executor, MappedStatement mappedStatement, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) {
+    this.configuration = mappedStatement.getConfiguration();
+    this.executor = executor;
+    this.mappedStatement = mappedStatement;
+    this.rowBounds = rowBounds;
+    this.typeHandlerRegistry = configuration.getTypeHandlerRegistry();
+    this.objectFactory = configuration.getObjectFactory();
+    if (boundSql == null) {
+      generateKeys(parameterObject);
+      boundSql = mappedStatement.getBoundSql(parameterObject);
+    }
+    this.boundSql = boundSql;
+  //创建参数的处理器 ，mybatis plus的是MybatisParameterHandler，mybatis的是ParameterHandler
+    this.parameterHandler = configuration.newParameterHandler(mappedStatement, parameterObject, boundSql);
+  //创建ResultSetHandler，默认使用的 DefaultResultSetHandler
+    this.resultSetHandler = configuration.newResultSetHandler(executor, mappedStatement, rowBounds, parameterHandler, resultHandler, boundSql);
+  }
+```
+
+#### 7.4.1 prepare()
+
+调用的是 **PreparedStatementHandler.instantiateStatement()** 方法
+
+- 设置key的生成器
+- 设置主键列的名称
+- 设置 ResultSet的类型
+
+```java
+protected Statement instantiateStatement(Connection connection) throws SQLException {
+    String sql = boundSql.getSql();
+    if (mappedStatement.getKeyGenerator() instanceof Jdbc3KeyGenerator) {
+      String[] keyColumnNames = mappedStatement.getKeyColumns();
+      if (keyColumnNames == null) {
+        return connection.prepareStatement(sql, PreparedStatement.RETURN_GENERATED_KEYS);
+      } else {
+        return connection.prepareStatement(sql, keyColumnNames);
+      }
+    } else if (mappedStatement.getResultSetType() == ResultSetType.DEFAULT) {
+      return connection.prepareStatement(sql);
+    } else {
+      return connection.prepareStatement(sql, mappedStatement.getResultSetType().getValue(), ResultSet.CONCUR_READ_ONLY);
+    }
+  }
+```
+
+#### 7.4.2 parameterize()
+
+调用的是 **PreparedStatementHandler.parameterize()** 方法来进行参数设置
+
+```java
+public void parameterize(Statement statement) throws SQLException {
+  parameterHandler.setParameters((PreparedStatement) statement);
+}
+```
+
+- boundSql：通过 **MappedStatement** 根据参数进行构建的，里面会保存sql数据和对应的参数映射
+  - 注意的是，如果xml中使用for标签来遍历的话，**MappedStatement**会根据List构建多个ParameterMapping，key值是参数的 **名称+下划线+索引** 
+- 通过配置对象获取到对应的类型处理器
+
+```java
+public void setParameters(PreparedStatement ps) {
+        ErrorContext.instance().activity("setting parameters").object(this.mappedStatement.getParameterMap().getId());
+        //获取到对应的sql参数映射，boundSql中会对sql字符串进行解析，在构建boundSql的时解析sql中的#{}占位符并且解析出对应的参数映射器
+        List<ParameterMapping> parameterMappings = this.boundSql.getParameterMappings();
+        if (parameterMappings != null) {
+            for (int i = 0; i < parameterMappings.size(); i++) {
+                ParameterMapping parameterMapping = parameterMappings.get(i);
+                //参数模式不是输出的时候才进行设置参数
+                if (parameterMapping.getMode() != ParameterMode.OUT) {
+                    Object value;
+                    //获取到参数的名称
+                    String propertyName = parameterMapping.getProperty();
+                    //是否有额外的参数信息
+                    if (this.boundSql.hasAdditionalParameter(propertyName)) { // issue #448 ask first for additional params
+                        value = this.boundSql.getAdditionalParameter(propertyName);
+                    } else if (this.parameterObject == null) {
+                        value = null;
+                        //根据参数的类型获取对应的类型处理器
+                    } else if (this.typeHandlerRegistry.hasTypeHandler(this.parameterObject.getClass())) {
+                        value = parameterObject;
+                    } else {
+                        //创建元数据对象，帮助获取到参数的数据
+                        MetaObject metaObject = this.configuration.newMetaObject(this.parameterObject);
+                        //然后根据参数的名称来获取到传入的对象数据
+                        value = metaObject.getValue(propertyName);
+                    }
+                    TypeHandler typeHandler = parameterMapping.getTypeHandler();
+                    JdbcType jdbcType = parameterMapping.getJdbcType();
+                    if (value == null && jdbcType == null) {
+                        jdbcType = this.configuration.getJdbcTypeForNull();
+                    }
+                    try {
+                        //根据类型处理器设置参数到对应的 ？
+                        typeHandler.setParameter(ps, i + 1, value, jdbcType);
+                    } catch (TypeException | SQLException e) {
+                        throw new TypeException("Could not set parameters for mapping: " + parameterMapping + ". Cause: " + e, e);
+                    }
+                }
+            }
+        }
+    }
+```
+
+#### 7.4.3 query()
+
+执行查询，调用的是 **PreparedStatementHandler.query()**，根据结果通过 **DefaultResultSetHandler** 进行处理
+
+```java
+public <E> List<E> query(Statement statement, ResultHandler resultHandler) throws SQLException {
+  PreparedStatement ps = (PreparedStatement) statement;
+  //执行sql查询
+  ps.execute();
+  return resultSetHandler.handleResultSets(ps);
+}
+```
+
+## 8. ResultSetHandler
+
+Mybatis 使用的是 **DefaultResultSetHandler** 
