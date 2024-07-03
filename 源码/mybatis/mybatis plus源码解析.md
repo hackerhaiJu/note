@@ -1028,7 +1028,7 @@ public class MybatisPlusAutoConfiguration implements InitializingBean {
 
         // TODO 此处必为非 NULL
         GlobalConfig globalConfig = this.properties.getGlobalConfig();
-        // TODO 注入填充器
+        // TODO 注入填充器，在参数 MybatisParameterHandler 执行时进行数据插入
         this.getBeanThen(MetaObjectHandler.class, globalConfig::setMetaObjectHandler);
         // TODO 注入参与器
         this.getBeanThen(PostInitTableInfoHandler.class, globalConfig::setPostInitTableInfoHandler);
@@ -1071,19 +1071,7 @@ public static class AutoConfiguredMapperScannerRegistrar
   
   @Override
         public void registerBeanDefinitions(AnnotationMetadata importingClassMetadata, BeanDefinitionRegistry registry) {
-
-            if (!AutoConfigurationPackages.has(this.beanFactory)) {
-                logger.debug("Could not determine auto-configuration package, automatic mapper scanning disabled.");
-                return;
-            }
-
-            logger.debug("Searching for mappers annotated with @Mapper");
-
             List<String> packages = AutoConfigurationPackages.get(this.beanFactory);
-            if (logger.isDebugEnabled()) {
-                packages.forEach(pkg -> logger.debug("Using auto-configuration base package '{}'", pkg));
-            }
-
             BeanDefinitionBuilder builder = BeanDefinitionBuilder.genericBeanDefinition(MapperScannerConfigurer.class);
             builder.addPropertyValue("processPropertyPlaceHolders", true);
             builder.addPropertyValue("annotationClass", Mapper.class);
@@ -1158,10 +1146,6 @@ public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) {
     }
 ```
 
-
-
-
-
 ### 4.4 MapperScannerRegistrarNotFoundConfiguration
 
 用于导入 **AutoConfiguredMapperScannerRegistrar** 扫描类，用于扫描**Mapper** 接口
@@ -1174,8 +1158,6 @@ public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) {
 
         @Override
         public void afterPropertiesSet() {
-            logger.debug(
-                "Not found configuration for registering mapper bean using @MapperScan, MapperFactoryBean and MapperScannerConfigurer.");
         }
     }
 ```
@@ -1403,8 +1385,6 @@ public T newInstance(SqlSession sqlSession) {
     return newInstance(mapperProxy);
   }
 ```
-
-
 
 ### 5.7 MybatisMapperProxy与MapperProxy
 
