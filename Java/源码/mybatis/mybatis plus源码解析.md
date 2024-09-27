@@ -968,80 +968,80 @@ public class MybatisPlusAutoConfiguration implements InitializingBean {
 
 ```java
 @Bean
-    @ConditionalOnMissingBean
-    public SqlSessionFactory sqlSessionFactory(DataSource dataSource) throws Exception {
-        // TODO 使用 MybatisSqlSessionFactoryBean 而不是 SqlSessionFactoryBean
-        MybatisSqlSessionFactoryBean factory = new MybatisSqlSessionFactoryBean();
-        //设置数据源
-        factory.setDataSource(dataSource);
-        //设置vfs虚拟文件系统
-        factory.setVfs(SpringBootVFS.class);
-        //设置mybatis配置文件的路径
-        if (StringUtils.hasText(this.properties.getConfigLocation())) {
-            factory.setConfigLocation(this.resourceLoader.getResource(this.properties.getConfigLocation()));
-        }
-        //执行ConfigurationCustomizer
-        applyConfiguration(factory);
-        //设置配置文件
-        if (this.properties.getConfigurationProperties() != null) {
-            factory.setConfigurationProperties(this.properties.getConfigurationProperties());
-        }
-        //设置容器中的拦截器
-        if (!ObjectUtils.isEmpty(this.interceptors)) {
-            factory.setPlugins(this.interceptors);
-        }
-        //设置数据库的名称
-        if (this.databaseIdProvider != null) {
-            factory.setDatabaseIdProvider(this.databaseIdProvider);
-        }
-        //设置别名的包路径
-        if (StringUtils.hasLength(this.properties.getTypeAliasesPackage())) {
-            factory.setTypeAliasesPackage(this.properties.getTypeAliasesPackage());
-        }
-        //设置别名的父类
-        if (this.properties.getTypeAliasesSuperType() != null) {
-            factory.setTypeAliasesSuperType(this.properties.getTypeAliasesSuperType());
-        }
-        //设置 TypeHandler 的包路径
-        if (StringUtils.hasLength(this.properties.getTypeHandlersPackage())) {
-            factory.setTypeHandlersPackage(this.properties.getTypeHandlersPackage());
-        }
-        //设置容器中的 TypeHandler
-        if (!ObjectUtils.isEmpty(this.typeHandlers)) {
-            factory.setTypeHandlers(this.typeHandlers);
-        }
-        //设置Mapper的路径
-        if (!ObjectUtils.isEmpty(this.properties.resolveMapperLocations())) {
-            factory.setMapperLocations(this.properties.resolveMapperLocations());
-        }
-        // TODO 修改源码支持定义 TransactionFactory
-        this.getBeanThen(TransactionFactory.class, factory::setTransactionFactory);
-
-        // 设置使用默认的语法驱动
-        Class<? extends LanguageDriver> defaultLanguageDriver = this.properties.getDefaultScriptingLanguageDriver();
-        if (!ObjectUtils.isEmpty(this.languageDrivers)) {
-            factory.setScriptingLanguageDrivers(this.languageDrivers);
-        }
-        Optional.ofNullable(defaultLanguageDriver).ifPresent(factory::setDefaultScriptingLanguageDriver);
-
-        applySqlSessionFactoryBeanCustomizers(factory);
-
-        // TODO 此处必为非 NULL
-        GlobalConfig globalConfig = this.properties.getGlobalConfig();
-        // TODO 注入填充器，在参数 MybatisParameterHandler 执行时进行数据插入
-        this.getBeanThen(MetaObjectHandler.class, globalConfig::setMetaObjectHandler);
-        // TODO 注入参与器
-        this.getBeanThen(PostInitTableInfoHandler.class, globalConfig::setPostInitTableInfoHandler);
-        // TODO 注入主键生成器
-        this.getBeansThen(IKeyGenerator.class, i -> globalConfig.getDbConfig().setKeyGenerators(i));
-        // TODO 注入sql注入器
-        this.getBeanThen(ISqlInjector.class, globalConfig::setSqlInjector);
-        // TODO 注入ID生成器
-        this.getBeanThen(IdentifierGenerator.class, globalConfig::setIdentifierGenerator);
-        // TODO 设置 GlobalConfig 到 MybatisSqlSessionFactoryBean
-        factory.setGlobalConfig(globalConfig);
-        return factory.getObject();
+@ConditionalOnMissingBean
+public SqlSessionFactory sqlSessionFactory(DataSource dataSource) throws Exception {
+    // TODO 使用 MybatisSqlSessionFactoryBean 而不是 SqlSessionFactoryBean
+    MybatisSqlSessionFactoryBean factory = new MybatisSqlSessionFactoryBean();
+    //设置数据源
+    factory.setDataSource(dataSource);
+    //设置vfs虚拟文件系统
+    factory.setVfs(SpringBootVFS.class);
+    //设置mybatis配置文件的路径
+    if (StringUtils.hasText(this.properties.getConfigLocation())) {
+        factory.setConfigLocation(this.resourceLoader.getResource(this.properties.getConfigLocation()));
     }
+    //执行ConfigurationCustomizer
+    applyConfiguration(factory);
+    //设置配置文件
+    if (this.properties.getConfigurationProperties() != null) {
+        factory.setConfigurationProperties(this.properties.getConfigurationProperties());
+    }
+    //设置容器中的拦截器
+    if (!ObjectUtils.isEmpty(this.interceptors)) {
+        factory.setPlugins(this.interceptors);
+    }
+    //设置数据库的名称
+    if (this.databaseIdProvider != null) {
+        factory.setDatabaseIdProvider(this.databaseIdProvider);
+    }
+    //设置别名的包路径
+    if (StringUtils.hasLength(this.properties.getTypeAliasesPackage())) {
+        factory.setTypeAliasesPackage(this.properties.getTypeAliasesPackage());
+    }
+    //设置别名的父类
+    if (this.properties.getTypeAliasesSuperType() != null) {
+        factory.setTypeAliasesSuperType(this.properties.getTypeAliasesSuperType());
+    }
+    //设置 TypeHandler 的包路径
+    if (StringUtils.hasLength(this.properties.getTypeHandlersPackage())) {
+        factory.setTypeHandlersPackage(this.properties.getTypeHandlersPackage());
+    }
+    //设置容器中的 TypeHandler
+    if (!ObjectUtils.isEmpty(this.typeHandlers)) {
+        factory.setTypeHandlers(this.typeHandlers);
+    }
+    //设置Mapper的路径
+    if (!ObjectUtils.isEmpty(this.properties.resolveMapperLocations())) {
+        factory.setMapperLocations(this.properties.resolveMapperLocations());
+    }
+    // TODO 修改源码支持定义 TransactionFactory
+    this.getBeanThen(TransactionFactory.class, factory::setTransactionFactory);
+
+    // 设置使用默认的语法驱动
+    Class<? extends LanguageDriver> defaultLanguageDriver = this.properties.getDefaultScriptingLanguageDriver();
+    if (!ObjectUtils.isEmpty(this.languageDrivers)) {
+        factory.setScriptingLanguageDrivers(this.languageDrivers);
+    }
+    Optional.ofNullable(defaultLanguageDriver).ifPresent(factory::setDefaultScriptingLanguageDriver);
+
+    applySqlSessionFactoryBeanCustomizers(factory);
+
+    // TODO 此处必为非 NULL
+    GlobalConfig globalConfig = this.properties.getGlobalConfig();
+    // TODO 注入填充器，在参数 MybatisParameterHandler 执行时进行数据插入
+    this.getBeanThen(MetaObjectHandler.class, globalConfig::setMetaObjectHandler);
+    // TODO 注入参与器
+    this.getBeanThen(PostInitTableInfoHandler.class, globalConfig::setPostInitTableInfoHandler);
+    // TODO 注入主键生成器
+    this.getBeansThen(IKeyGenerator.class, i -> globalConfig.getDbConfig().setKeyGenerators(i));
+    // TODO 注入sql注入器
+    this.getBeanThen(ISqlInjector.class, globalConfig::setSqlInjector);
+    // TODO 注入ID生成器
+    this.getBeanThen(IdentifierGenerator.class, globalConfig::setIdentifierGenerator);
+    // TODO 设置 GlobalConfig 到 MybatisSqlSessionFactoryBean
+    factory.setGlobalConfig(globalConfig);
+    return factory.getObject();
+}
 ```
 
 ### 4.2 SqlSessionTemplate
@@ -1980,21 +1980,70 @@ private Statement prepareStatement(StatementHandler handler, Log statementLog) t
 - CallableStatementHandler：可执行数据库存储过程的处理器
 
 ```java
-protected BaseStatementHandler(Executor executor, MappedStatement mappedStatement, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) {
+/**
+   * 全局配置对象
+   */
+  protected final Configuration configuration;
+  /**
+   * 对象工厂
+   */
+  protected final ObjectFactory objectFactory;
+  /**
+   * 别名注册工厂
+   */
+  protected final TypeHandlerRegistry typeHandlerRegistry;
+  /**
+   * 结果集处理器：DefaultResultSetHandler
+   */
+  protected final ResultSetHandler resultSetHandler;
+  /**
+   * 参数处理器，默认通过配置对象进行创建 org.apache.ibatis.scripting.xmltags.XMLLanguageDriver#createParameterHandler() 返回
+   * DefaultParameterHandler，如果有插件配置这里会保存代理对象
+   * 如果是mybatis plus这里存储的是  MybatisParameterHandler
+   */
+  protected final ParameterHandler parameterHandler;
+
+  /**
+   * 执行器
+   */
+  protected final Executor executor;
+
+  /**
+   * sql语句的持有对象
+   */
+  protected final MappedStatement mappedStatement;
+
+  /**
+   * 行数的持有对象，相当于分页对象
+   */
+  protected final RowBounds rowBounds;
+
+  /**
+   * sql持有对象，里面缓存了sql、ParameterMapping参数映射、参数对象
+   * 这里保存的是通过参数解析对应的sql语句，例如：#{}和${} 的替换
+   */
+  protected BoundSql boundSql;
+
+  protected BaseStatementHandler(Executor executor, MappedStatement mappedStatement, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) {
     this.configuration = mappedStatement.getConfiguration();
     this.executor = executor;
     this.mappedStatement = mappedStatement;
     this.rowBounds = rowBounds;
+
     this.typeHandlerRegistry = configuration.getTypeHandlerRegistry();
     this.objectFactory = configuration.getObjectFactory();
-    if (boundSql == null) {
+
+    if (boundSql == null) { // issue #435, get the key before calculating the statement
+      //调用前置key生成器方法
       generateKeys(parameterObject);
+      //通过参数从sql中解析具体执行的sql语句
       boundSql = mappedStatement.getBoundSql(parameterObject);
     }
+
     this.boundSql = boundSql;
-  //创建参数的处理器 ，mybatis plus的是MybatisParameterHandler，mybatis的是ParameterHandler
+    //根据语言驱动创建参数处理器，这里如果使用的mybatis plus会通过 MybatisXMLLanguageDriver 被替换为 MybatisParameterHandler进行参数的处理
     this.parameterHandler = configuration.newParameterHandler(mappedStatement, parameterObject, boundSql);
-  //创建ResultSetHandler，默认使用的 DefaultResultSetHandler
+    //创建结果集的处理器，结果集的处理器也可以被动态代理进行代理
     this.resultSetHandler = configuration.newResultSetHandler(executor, mappedStatement, rowBounds, parameterHandler, resultHandler, boundSql);
   }
 ```
@@ -2100,7 +2149,262 @@ public <E> List<E> query(Statement statement, ResultHandler resultHandler) throw
 
 Mybatis 使用的是 **DefaultResultSetHandler** 
 
+```java
+public List<Object> handleResultSets(Statement stmt) throws SQLException {
+    ErrorContext.instance().activity("handling results").object(mappedStatement.getId());
+    //存放最终的结果集
+    final List<Object> multipleResults = new ArrayList<>();
+
+    int resultSetCount = 0;
+    //获取到第一个结果集包装一下，结果集包装器中存放了每列的名称和类型
+    ResultSetWrapper rsw = getFirstResultSet(stmt);
+    //获取到当前sql中所引用的 ResultMap集合
+    List<ResultMap> resultMaps = mappedStatement.getResultMaps();
+    //获取到配置的所有的ResultMap
+    int resultMapCount = resultMaps.size();
+    //返回的结果集不为空并且resultMap的数量不小于1，这里会根据标签的 resultType解析出一个默认的
+    validateResultMapsCount(rsw, resultMapCount);
+    //遍历 ResultMap集合，根据结果集的数量来进行处理
+    while (rsw != null && resultMapCount > resultSetCount) {
+      ResultMap resultMap = resultMaps.get(resultSetCount);
+      //通过ResultMap处理结果集
+      handleResultSet(rsw, resultMap, multipleResults, null);
+      //获取到下一个结果集，一次链接操作可能会执行多个sql，每一条sql都会有一个 ResultSet
+      rsw = getNextResultSet(stmt);
+      cleanUpAfterHandlingResultSet();
+      resultSetCount++;
+    }
+    String[] resultSets = mappedStatement.getResultSets();
+    if (resultSets != null) {
+      while (rsw != null && resultSetCount < resultSets.length) {
+        ResultMapping parentMapping = nextResultMaps.get(resultSets[resultSetCount]);
+        if (parentMapping != null) {
+          String nestedResultMapId = parentMapping.getNestedResultMapId();
+          ResultMap resultMap = configuration.getResultMap(nestedResultMapId);
+          handleResultSet(rsw, resultMap, null, parentMapping);
+        }
+        rsw = getNextResultSet(stmt);
+        cleanUpAfterHandlingResultSet();
+        resultSetCount++;
+      }
+    }
+  	//如果只有当个结果集，直接取第一个元素
+    return collapseSingleResultList(multipleResults);
+  }
+```
+
+开始处理结果集，处理时是通过递归进行调用可能会存在标签继承的情况也就是 **parentMapping** 可能不会为空；在处理结果集是还需要判断是否存在内嵌的标签例如：collection标签
+
+```java
+private void handleResultSet(ResultSetWrapper rsw, ResultMap resultMap, List<Object> multipleResults, ResultMapping parentMapping) throws SQLException {
+  try {
+    //父级映射不为空，说明是嵌套查询
+    if (parentMapping != null) {
+      handleRowValues(rsw, resultMap, null, RowBounds.DEFAULT, parentMapping);
+    } else {
+      //如果结果集处理器为空，那么就创建一个默认的结果集处理器
+      if (resultHandler == null) {
+        DefaultResultHandler defaultResultHandler = new DefaultResultHandler(objectFactory);
+        handleRowValues(rsw, resultMap, defaultResultHandler, rowBounds, null);
+        multipleResults.add(defaultResultHandler.getResultList());
+      } else {
+        //开始处理结果集
+        handleRowValues(rsw, resultMap, resultHandler, rowBounds, null);
+      }
+    }
+  } finally {
+    // 关闭结果集
+    closeResultSet(rsw.getResultSet());
+  }
+}
+
+public void handleRowValues(ResultSetWrapper rsw, ResultMap resultMap, ResultHandler<?> resultHandler, RowBounds rowBounds, ResultMapping parentMapping) throws SQLException {
+  //是否有嵌套查询
+  if (resultMap.hasNestedResultMaps()) {
+    ensureNoRowBounds();
+    //检查 ResultHandler 是否是自定的结果处理器，如果自定的并且isSafeResultHandlerEnabled是true，那么就抛出异常
+    checkResultHandler();
+    //根据内嵌的ResultMap进行处理数据，例如：collection标签
+    handleRowValuesForNestedResultMap(rsw, resultMap, resultHandler, rowBounds, parentMapping);
+  } else {
+    //处理普通的结果集
+    handleRowValuesForSimpleResultMap(rsw, resultMap, resultHandler, rowBounds, parentMapping);
+  }
+}
+```
+
+处理内嵌结果集
+
+```java
+private void handleRowValuesForNestedResultMap(ResultSetWrapper rsw, ResultMap resultMap, ResultHandler<?> resultHandler, RowBounds rowBounds, ResultMapping parentMapping) throws SQLException {
+    final DefaultResultContext<Object> resultContext = new DefaultResultContext<>();
+    //获取到结果集
+    ResultSet resultSet = rsw.getResultSet();
+    //跳过默认的数据
+    skipRows(resultSet, rowBounds);
+    //每次处理数据时保存上一次的数据，默认为空
+    Object rowValue = previousRowValue;
+    //需要先判断处理的数据是否已经超过了分页对象指定的限制数 RowBounds.getLimit();
+    while (shouldProcessMoreRows(resultContext, rowBounds) && !resultSet.isClosed() && resultSet.next()) {
+      //根据对应ResultMap来获取到对应的ResultMap，可能会通过分割器来映射不同的结果集
+      final ResultMap discriminatedResultMap = resolveDiscriminatedResultMap(resultSet, resultMap, null);
+      //创建缓存key
+      final CacheKey rowKey = createRowKey(discriminatedResultMap, rsw, null);
+      Object partialObject = nestedResultObjects.get(rowKey);
+      // resultOrdered默认false，表示是否需要按照顺序来处理数据；resultOrdered 的作用是确保在多结果集返回时，父结果和子结果之间的关联关系按照预期的顺序来映射和处理
+      if (mappedStatement.isResultOrdered()) {
+        if (partialObject == null && rowValue != null) {
+          nestedResultObjects.clear();
+          storeObject(resultHandler, resultContext, rowValue, parentMapping, resultSet);
+        }
+        //根据获取到分割的ResultMap来处理映射数据
+        rowValue = getRowValue(rsw, discriminatedResultMap, rowKey, null, partialObject);
+      } else {
+        rowValue = getRowValue(rsw, discriminatedResultMap, rowKey, null, partialObject);
+        if (partialObject == null) {
+          storeObject(resultHandler, resultContext, rowValue, parentMapping, resultSet);
+        }
+      }
+    }
+    if (rowValue != null && mappedStatement.isResultOrdered() && shouldProcessMoreRows(resultContext, rowBounds)) {
+      storeObject(resultHandler, resultContext, rowValue, parentMapping, resultSet);
+      previousRowValue = null;
+    } else if (rowValue != null) {
+      previousRowValue = rowValue;
+    }
+  }
+```
+
+处理普通的结果集
+
+```java
+private void handleRowValuesForSimpleResultMap(ResultSetWrapper rsw, ResultMap resultMap, ResultHandler<?> resultHandler, RowBounds rowBounds, ResultMapping parentMapping)
+      throws SQLException {
+  DefaultResultContext<Object> resultContext = new DefaultResultContext<>();
+  //获取到查询的结果集
+  ResultSet resultSet = rsw.getResultSet();
+  //跳过分页的数据
+  skipRows(resultSet, rowBounds);
+  while (shouldProcessMoreRows(resultContext, rowBounds) && !resultSet.isClosed() && resultSet.next()) {
+    //解析 discriminator 标签使用的resultMap，如果没有配置分割器的话，返回的就是上面传入的
+    ResultMap discriminatedResultMap = resolveDiscriminatedResultMap(resultSet, resultMap, null);
+    Object rowValue = getRowValue(rsw, discriminatedResultMap, null);
+    //存储对象
+    storeObject(resultHandler, resultContext, rowValue, parentMapping, resultSet);
+  }
+}
+```
+
 
 
 ## 9. 插件系统
+
+mybatis plus的插件系统提供了一个统一外层处理的插件，然后在内部进行分发
+
+```java
+@Intercepts(
+    {
+        @Signature(type = StatementHandler.class, method = "prepare", args = {Connection.class, Integer.class}),
+        @Signature(type = StatementHandler.class, method = "getBoundSql", args = {}),
+        @Signature(type = Executor.class, method = "update", args = {MappedStatement.class, Object.class}),
+        @Signature(type = Executor.class, method = "query", args = {MappedStatement.class, Object.class, RowBounds.class, ResultHandler.class}),
+        @Signature(type = Executor.class, method = "query", args = {MappedStatement.class, Object.class, RowBounds.class, ResultHandler.class, CacheKey.class, BoundSql.class}),
+    }
+)
+public class MybatisPlusInterceptor implements Interceptor {}
+```
+
+定义了内部插件的拦截器 **InnerInterceptor**，mybatis plus的插件实现这个接口即可
+
+```java
+public interface InnerInterceptor {
+
+    /**
+     * 判断是否执行 {@link Executor#query(MappedStatement, Object, RowBounds, ResultHandler, CacheKey, BoundSql)}
+     * <p>
+     * 如果不执行query操作,则返回 {@link Collections#emptyList()}
+     *
+     * @param executor      Executor(可能是代理对象)
+     * @param ms            MappedStatement
+     * @param parameter     parameter
+     * @param rowBounds     rowBounds
+     * @param resultHandler resultHandler
+     * @param boundSql      boundSql
+     * @return 新的 boundSql
+     */
+    default boolean willDoQuery(Executor executor, MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) throws SQLException {
+        return true;
+    }
+
+    /**
+     * {@link Executor#query(MappedStatement, Object, RowBounds, ResultHandler, CacheKey, BoundSql)} 操作前置处理
+     * <p>
+     * 改改sql啥的
+     *
+     * @param executor      Executor(可能是代理对象)
+     * @param ms            MappedStatement
+     * @param parameter     parameter
+     * @param rowBounds     rowBounds
+     * @param resultHandler resultHandler
+     * @param boundSql      boundSql
+     */
+    default void beforeQuery(Executor executor, MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) throws SQLException {
+        // do nothing
+    }
+
+    /**
+     * 判断是否执行 {@link Executor#update(MappedStatement, Object)}
+     * <p>
+     * 如果不执行update操作,则影响行数的值为 -1
+     *
+     * @param executor  Executor(可能是代理对象)
+     * @param ms        MappedStatement
+     * @param parameter parameter
+     */
+    default boolean willDoUpdate(Executor executor, MappedStatement ms, Object parameter) throws SQLException {
+        return true;
+    }
+
+    /**
+     * {@link Executor#update(MappedStatement, Object)} 操作前置处理
+     * <p>
+     * 改改sql啥的
+     *
+     * @param executor  Executor(可能是代理对象)
+     * @param ms        MappedStatement
+     * @param parameter parameter
+     */
+    default void beforeUpdate(Executor executor, MappedStatement ms, Object parameter) throws SQLException {
+        // do nothing
+    }
+
+    /**
+     * {@link StatementHandler#prepare(Connection, Integer)} 操作前置处理
+     * <p>
+     * 改改sql啥的
+     *
+     * @param sh                 StatementHandler(可能是代理对象)
+     * @param connection         Connection
+     * @param transactionTimeout transactionTimeout
+     */
+    default void beforePrepare(StatementHandler sh, Connection connection, Integer transactionTimeout) {
+        // do nothing
+    }
+
+    /**
+     * {@link StatementHandler#getBoundSql()} 操作前置处理
+     * <p>
+     * 只有 {@link BatchExecutor} 和 {@link ReuseExecutor} 才会调用到这个方法
+     *
+     * @param sh StatementHandler(可能是代理对象)
+     */
+    default void beforeGetBoundSql(StatementHandler sh) {
+        // do nothing
+    }
+
+    default void setProperties(Properties properties) {
+        // do nothing
+    }
+}
+```
 
