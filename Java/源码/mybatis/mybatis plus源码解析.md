@@ -1343,7 +1343,7 @@ public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) {
 
 ### 5.1 MapperFactoryBean
 
-![image-20240415150723811](images/image-20240415150723811.png)
+![image-20240415150723811](https://cdn.jsdelivr.net/gh/hackerhaiJu/note-picture@main/note-picture/image-20240415150723811.png)
 
 mybatis使用的是动态代理创建接口对象，然后通过 **SqlSessionTemplate** 将对应的代理对象添加到 **Configuration**中，在使用的时候通过 **getObject()** 方法获取到代理对象来进行处理
 
@@ -1597,7 +1597,7 @@ private MapperMethodInvoker cachedInvoker(Method method) throws Throwable {
 
 ### 5.8 调用逻辑
 
-![mapper调用流程](images/mapper调用流程.svg)
+![mapper调用流程](https://cdn.jsdelivr.net/gh/hackerhaiJu/note-picture@main/note-picture/mapper%E8%B0%83%E7%94%A8%E6%B5%81%E7%A8%8B.svg)
 
 
 
@@ -2324,7 +2324,7 @@ public <E> List<E> query(Statement statement, ResultHandler resultHandler) throw
 
 Mybatis 使用的是 **DefaultResultSetHandler** 
 
-### 8.1处理内嵌结果
+### 8.1 处理内嵌结果
 
 ```java
 public List<Object> handleResultSets(Statement stmt) throws SQLException {
@@ -2644,8 +2644,6 @@ private Object getPropertyMappingValue(ResultSet rs, MetaObject metaResultObject
   }
 ```
 
-
-
 整个处理的流程为
 
 - 先判断是否存在内嵌结果集，用到比较核心的属性
@@ -2664,7 +2662,7 @@ private Object getPropertyMappingValue(ResultSet rs, MetaObject metaResultObject
   - applyNestedResultMappings方法则处理当前结果集包含的内嵌字段
   - getPropertyMappingValue方法则处理嵌套查询中是否存在内嵌的查询id
 
-![](images/结果集处理流程.svg)
+![](https://cdn.jsdelivr.net/gh/hackerhaiJu/note-picture@main/note-picture/%E7%BB%93%E6%9E%9C%E9%9B%86%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8B.svg)
 
 
 
