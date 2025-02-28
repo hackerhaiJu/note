@@ -55,14 +55,14 @@
 
 https://blog.csdn.net/m0_69655483/article/details/138229566
 
-- AdamW学习率：5e-5比较常见（在预先已经训练好的模型上进行微调）
+- AdamW学习率：1e-5，如果不稳定可以调整到3e-5
   - 预训练（Pretraining）：1e-4 ～ 5e-4，从头训练时分布变化大
   - 全参微调（Full Fine-tunning）：1e-5 ～ 5e-5：微调时需小幅调整参数，避免破坏预训练知识
   - LoRA/QLoRA：2e-5 ～ 3e-4，仅调整少量参数，可以适当提高学习率加速收敛
 
-- 训练轮数：越多越好，测试的话1-3就行，数据越大花的时间也越久
+- 训练轮数：测试的话1-3就行，数据越大花的时间也越久（如果数据集少，训练轮数过多会出现过拟合现象，数据在1000-5000训练10轮比较合适）
 
-- 微调方法：使用lora方法进行
+- 微调方法（lora）：使用lora方法进行
 
 - loss（损失）：损失值是一个衡量模型预测与实际标签之间差异的指标，损失值越小，表示模型的预测结果越接近真实值
 
@@ -70,15 +70,114 @@ https://blog.csdn.net/m0_69655483/article/details/138229566
 
 - 梯度累计（grad）：在训练大规模深度学习模型时，特别是当模型和数据集都非常大时，显存限制可能使得一次性处理大批量数据变得困难。较小的批处理大小虽然可以缓解显存压力，但可能会导致梯度估计的方差较大，从而影响模型的收敛速度和性能；显存比较紧张的设置小一点例如：4
 
-- 温度系数：温度系数越小模型回答的越保守，温度系数越大模型回答的越有创造力
+- 温度系数（temperature）：温度系数越小模型回答的越保守，温度系数越大模型回答的越有创造力
 - LoRA秩：影响模型的表达能力、训练稳定性
   - 2-16：参数少，显存占用低，训练快；表达能力有限，可能欠拟合；适用于简单任务、显存紧张、快速实验
   - 16-64：平衡表达力与效率；需调参优化；通用任务（文本生成、分类等）
   - 大64+：捕捉复杂模式，性能潜力高；显存要求高，易过拟合；复杂任务（数学推理、长文本生成）
+- 预热步数（warmup_steps）：目的是在训练初期逐渐增加学习率，而不是一开始就使用较高的学习率。这种做法有助于稳定训练过程，特别是在训练初期。计算方式：总步数 = 训练轮数 x （数据集的条数 / 批次数）的%5-%10 比较合适
+- deepspeed：分布式训练的技术，直接使用默认即可，可以指定模型分片在多个显卡上面
 
 ### 3.2.3 微调
 
-以 **DeepSeek-R1-Distill-Qwen-1.5B** 模型使用魔搭 **Robin021/DISC-Law-SFT** 提取1000数据进行微调
+以 **DeepSeek-R1-Distill-Qwen-1.5B** 模型使用魔搭 **Robin021/DISC-Law-SFT、distill_r1_110k** 提取数据进行微调
+
+```python
+import json
+import os
+import random
+
+
+# 加载专用垂直领域的数据集
+def load_data(number):
+    messages = []
+    with open('/Users/Downloads/DISC-Law-SFT-Triplet-released.jsonl', 'r', encoding='utf-8') as f:
+        count = 0  # 添加计数器
+        for line in f:
+            if count >= number:  # 如果达到5000条，退出循环
+                break
+            data = json.loads(line)
+            user_message = {
+                "role": "user",
+                "content": data['input']
+            }
+            assistant_message = {
+                "role": "assistant",
+                "content": data['output']
+            }
+            message = {
+                "messages": [user_message, assistant_message]
+            }
+            messages.append(message)
+            count += 1  # 增加计数器
+    return messages
+
+
+# 加载指定数量的通用数据
+def load_normal_data(number):
+    messages = []
+    with open('/Users/Downloads/distill_r1_110k.jsonl', 'r', encoding='utf-8') as f:
+        count = 0  # 添加计数器
+        for line in f:
+            if count >= number:
+                break
+            data = json.loads(line)
+            user_message = {
+                "role": "user",
+                "content": data['input']
+            }
+            out_put = f"<think>{data['reasoning_content']}\n</think>{data['content']}"
+            assistant_message = {
+                "role": "assistant",
+                "content": out_put
+            }
+            message = {
+                "messages": [user_message, assistant_message]
+            }
+            messages.append(message)
+            count += 1  # 增加计数器
+    return messages
+
+
+# 加载数据集
+messages = load_data(1000)
+# 加载通用数据集
+normal_data = load_normal_data(1000)
+messages = normal_data + messages
+
+# 随机打乱数据顺序
+random.shuffle(messages)
+train_ratio = 0.9
+
+# 计算训练集和测试集的划分点
+split_index = int(len(messages) * train_ratio)
+
+# 分割数据为训练集和测试集
+train_data = messages[:split_index]
+
+
+test_data = messages[split_index:]
+
+# 判断路径是否存在
+path = './data'
+if not os.path.exists(path):
+    os.makedirs(path)
+
+# 将训练集保存到JSON文件
+with open(f'{path}/law_train.json', 'w', encoding='utf-8') as f:
+    json.dump(train_data, f, ensure_ascii=False, indent=4)
+
+# 将测试集保存到JSON文件
+with open(f'{path}/law_test.json', 'w', encoding='utf-8') as f:
+    json.dump(test_data, f, ensure_ascii=False, indent=4)
+
+```
+
+安装Swanboard进行日志监控，使用本地的方式进行
+
+> pip install swanlab
+>
+> swanlab watch /app/LLaMA-Factory/swanlog -h 0.0.0.0 #启动本地日志的监控
 
 #### 微调1
 
@@ -91,7 +190,9 @@ https://blog.csdn.net/m0_69655483/article/details/138229566
 
 ![image-20250221164043991](images/image-20250221164043991.png)
 
-结论：训练出的模型通过使用训练集的问题进行问答，出现了重复回答的情况并且结果对应不上
+结论：训练出的模型通过使用训练集的问题进行问答，出现了重复回答的情况并且结果对应不上，模型过拟合
+
+解决方案：增大数据集，混合普通数据到里面
 
 #### 微调2
 
@@ -101,6 +202,198 @@ https://blog.csdn.net/m0_69655483/article/details/138229566
 - 梯度累计：8
 - LoRA秩：128
 - 缩放系数：256
+
+结论：训练出的模型通过使用训练集的问题进行问答，回答与结果一致，成功率能够达到60%+左右，但是当模型回答了专业的问题后再问其他的问题，依旧按照专业的问题进行回答。（大模型灾难性遗忘，过拟合）
+
+解决方案：新增数据集、混合普通数据进行训练
+
+#### 微调3
+
+- 数据集：1000法律数据集、1000通用数据集，90%训练集，10%验证集
+- 学习率：4e-5
+- 训练轮数：20
+
+```sh
+export CUDA_VISIBLE_DEVICES=2,3 && nohup llamafactory-cli train \
+    --stage sft \
+    --do_train True \
+    --model_name_or_path /app/LLaMA-Factory/model/DeepSeek-R1-Distill-Qwen-1.5B \
+    --preprocessing_num_workers 16 \
+    --finetuning_type lora \
+    --template deepseek3 \
+    --flash_attn auto \
+    --dataset_dir data \
+    --dataset data_law \
+    --cutoff_len 2048 \
+    --learning_rate 4e-5 \
+    --num_train_epochs 20.0 \
+    --max_samples 100000 \
+    --per_device_train_batch_size 1 \
+    --gradient_accumulation_steps 8 \
+    --lr_scheduler_type cosine \
+    --max_grad_norm 1.0 \
+    --logging_steps 5 \
+    --save_steps 100 \
+    --warmup_steps 5 \
+    --packing False \
+    --report_to none \
+    --output_dir saves/DeepSeek-R1-1.5B-Distill/lora/train_2025-02-26-09-04-36 \
+    --bf16 True \
+    --plot_loss True \
+    --trust_remote_code True \
+    --ddp_timeout 180000000 \
+    --include_num_input_tokens_seen True \
+    --optim adamw_torch \
+    --lora_rank 8 \
+    --lora_alpha 16 \
+    --lora_dropout 0 \
+    --loraplus_lr_ratio 16 \
+    --lora_target all \
+    --swanlab_project llamafactory \
+    --swanlab_mode local \
+    --deepspeed cache/ds_z3_config.json  > llama.log 2>&1 & disown && ps -ef |grep '/usr/local/bin/llamafactory-cli train' | grep -v 'grep' | awk '{print $2}' > llamafactory.pid
+```
+
+微调后的测试结论，bleu-4在30左右数值，模型出现拟合，在训练集表现好测试集的数据就泛化能力不够
+
+![image-20250228104525686](images/image-20250228104525686.png)
+
+解决方案：降低轮数
+
+#### 微调4
+
+- 数据集：1000法律数据集、1000通用数据集，90%训练集，10%验证集
+- 学习率：4e-5
+- 训练轮数：10
+
+```sh
+export CUDA_VISIBLE_DEVICES=2,3 && nohup llamafactory-cli train \
+    --stage sft \
+    --do_train True \
+    --model_name_or_path /app/LLaMA-Factory/model/DeepSeek-R1-Distill-Qwen-1.5B \
+    --preprocessing_num_workers 16 \
+    --finetuning_type lora \
+    --template deepseek3 \
+    --flash_attn auto \
+    --dataset_dir data \
+    --dataset data_law \
+    --cutoff_len 2048 \
+    --learning_rate 4e-5 \
+    --num_train_epochs 10.0 \
+    --max_samples 100000 \
+    --per_device_train_batch_size 1 \
+    --gradient_accumulation_steps 8 \
+    --lr_scheduler_type cosine \
+    --max_grad_norm 1.0 \
+    --logging_steps 5 \
+    --save_steps 100 \
+    --warmup_steps 5 \
+    --packing False \
+    --report_to none \
+    --output_dir saves/DeepSeek-R1-1.5B-Distill/lora/train_2025-02-27-10-33-51 \
+    --bf16 True \
+    --plot_loss True \
+    --trust_remote_code True \
+    --ddp_timeout 180000000 \
+    --include_num_input_tokens_seen True \
+    --optim adamw_torch \
+    --lora_rank 8 \
+    --lora_alpha 16 \
+    --lora_dropout 0 \
+    --loraplus_lr_ratio 16 \
+    --lora_target all \
+    --swanlab_project llamafactory \
+    --swanlab_mode local \
+    --deepspeed cache/ds_z3_config.json  > llama.log 2>&1 & disown && ps -ef |grep '/usr/local/bin/llamafactory-cli train' | grep -v 'grep' | awk '{print $2}' > llamafactory.pid
+```
+
+微调后结论：降低了轮数，使用测试集相比较微调2回调效果要好一点，但是bleu-4的分支上升的不多
+
+![image-20250228131600033](images/image-20250228131600033.png)
+
+优化方案：尝试提高学习率，降低轮数
+
+#### 微调5
+
+- 数据集：1000法律数据集、1000通用数据集，90%训练集，10%验证集
+- 学习率：3e-4
+- 训练轮数：10
+
+```sh
+export CUDA_VISIBLE_DEVICES=2,3 && nohup llamafactory-cli train \
+    --stage sft \
+    --do_train True \
+    --model_name_or_path /app/LLaMA-Factory/model/DeepSeek-R1-Distill-Qwen-1.5B \
+    --preprocessing_num_workers 16 \
+    --finetuning_type lora \
+    --template deepseek3 \
+    --flash_attn auto \
+    --dataset_dir data \
+    --dataset law_train \
+    --cutoff_len 2048 \
+    --learning_rate 3e-4 \
+    --num_train_epochs 10 \
+    --max_samples 100000 \
+    --per_device_train_batch_size 2 \
+    --gradient_accumulation_steps 2 \
+    --lr_scheduler_type cosine \
+    --max_grad_norm 1.0 \
+    --logging_steps 5 \
+    --save_steps 100 \
+    --warmup_steps 4 \
+    --packing False \
+    --report_to none \
+    --use_swanlab True \
+    --output_dir saves/DeepSeek-R1-1.5B-Distill/lora/train_2025-02-28-05-20-59 \
+    --bf16 True \
+    --plot_loss True \
+    --trust_remote_code True \
+    --ddp_timeout 180000000 \
+    --include_num_input_tokens_seen True \
+    --optim adamw_torch \
+    --lora_rank 8 \
+    --lora_alpha 16 \
+    --lora_dropout 0 \
+    --loraplus_lr_ratio 16 \
+    --lora_target all \
+    --swanlab_project llamafactory \
+    --swanlab_mode local \
+    --deepspeed cache/ds_z3_config.json > llama.log 2>&1 & disown && ps -ef |grep '/usr/local/bin/llamafactory-cli train' | grep -v 'grep' | awk '{print $2}' > llamafactory.pid
+```
+
+微调后结论：
+
+优化方案：
+
+### 3.2.4 问题总结
+
+- 过拟合
+  - 现象
+    - 训练集损失函数正常的下降
+    - 验证集损失函数下降到一定程度开始回升
+    - 模型在回答训练集的数据表现的比较好，但是回答测试集上面的数据就牛头不对马嘴
+  - 解决方案
+    - 数据增强，将样本增强。如果是图片可以将样本旋转，裁切
+    - 早停法，在下到最低点停止训练
+    - dropout，减少参数量
+    - 适当降低学习率
+    - 降低训练的轮数
+- 欠拟合
+  - 现象
+    - 训练集损失函数正常下降
+    - 验证集损失函数与训练集损失函数的距离很远
+  - 解决方案
+    - 加深网络层数
+    - 尽量用一些非线性激活函数比如relu
+- 拟合，但是震荡
+  - 现象
+    - 验证集在训练集的损失函数线上面进行震荡
+  - 解决方案
+    - 减少学习率
+    - 减少数据
+- 恰好拟合（完美）
+- 不收敛
+  - 数据有问题
 
 # 4. Langchain
 
@@ -256,7 +549,54 @@ print(chain.invoke({'text': '我很郁闷怎么办'}))
 
 > pip install langchain-chroma
 
+```python
+from langchain_chroma import Chroma
+from langchain_core.runnables import RunnableLambda
+from langchain_ollama import OllamaEmbeddings
+from langchain_core.documents import Document
 
+
+def get_sample_documents():
+    documents: list[Document] = [
+        Document(
+            page_content="狗是伟大的伴侣，以其忠诚和友好而闻名。",
+            metadata={
+                "source": "https://www.baidu.com"
+            }
+        ),
+        Document(
+            page_content="猫是独立的宠物，通常喜欢自己的空间。",
+            metadata={
+                "source": "https://www.baidu.com"
+            }
+        ),
+    ]
+    return documents
+
+
+if __name__ == '__main__':
+    # 实例化一个向量数据空间
+    embeddings = OllamaEmbeddings()
+    # 指定ollama的地址
+    embeddings.base_url = "http://127.0.0.1:11434"
+    # 指定向量化技术的模型名称
+    embeddings.model = ""
+    vector_store = Chroma.from_documents(get_sample_documents(), embedding=embeddings)
+    # 相似度的查询：返回相似度的分数，分数越低相似度越高
+    score = vector_store.similarity_search_with_score('狗')
+    print(score)
+
+    # 检索器：bind(k=1) 返回相似度最高的一个，整合langchain链条，需要将其转换为RunnableLambda对象
+    retriever = RunnableLambda(vector_store.similarity_search).bind(k=1)
+    print(retriever.batch(['咖啡猫', '鲨鱼']))
+    pass
+```
+
+### 4.3.7 构建代理
+
+代理是使用大模型语言作为推理引擎来确定需要执行的操作以及这些操作的输入应该是什么，然后将结果反馈到大模型语言进行整合
+
+> pip install langgraph
 
 # 5. LangSmith
 
@@ -270,7 +610,7 @@ LangSmith是Langchain的一个子产品，是一个大模型应用开发平台�
 
 
 
-# Spring AI
+# 6. Spring AI
 
 Spring框架中提供的用于接入 **Ai大模型** 的抽象封装框架 [Spring AI](https://docs.spring.io/spring-ai/reference/getting-started.html)
 
