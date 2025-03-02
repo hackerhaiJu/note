@@ -55,7 +55,7 @@
 
 https://blog.csdn.net/m0_69655483/article/details/138229566
 
-- AdamW学习率：1e-5，如果不稳定可以调整到3e-5
+- AdamW学习率：1e-5，如果不稳定可以调整到3e-5。较高的学习率影响大模型的泛化能力和灾难性遗忘
   - 预训练（Pretraining）：1e-4 ～ 5e-4，从头训练时分布变化大
   - 全参微调（Full Fine-tunning）：1e-5 ～ 5e-5：微调时需小幅调整参数，避免破坏预训练知识
   - LoRA/QLoRA：2e-5 ～ 3e-4，仅调整少量参数，可以适当提高学习率加速收敛
@@ -179,160 +179,49 @@ with open(f'{path}/law_test.json', 'w', encoding='utf-8') as f:
 >
 > swanlab watch /app/LLaMA-Factory/swanlog -h 0.0.0.0 #启动本地日志的监控
 
-#### 微调1
+#### 模型评估
 
-- 学习率：4e-5
-- 轮数：1
-- 批处理：2
-- 梯度累计：8
-- LoRA秩：128
-- 缩放系数：256
+- BLEU-4：BLEU（Bilingual Evaluation Understudy）是一种常用的用于评估机器翻译质量的指标。BLEU-4 表示四元语法 BLEU 分数，它衡量模型生成文本与参考文本之间的 n-gram 匹配程度，其中 n=4。值越高表示生成的文本与参考文本越相似，最大值为 100。
 
-![image-20250221164043991](images/image-20250221164043991.png)
+- predict_rouge-1 和 predict_rouge-2：ROUGE（Recall-Oriented Understudy for Gisting Evaluation）是一种用于评估自动摘要和文本生成模型性能的指标。ROUGE-1 表示一元 ROUGE 分数，ROUGE-2 表示二元 ROUGE 分数，分别衡量模型生成文本与参考文本之间的单个词和双词序列的匹配程度。值越高表示生成的文本与参考文本越相似，最大值为 100。
 
-结论：训练出的模型通过使用训练集的问题进行问答，出现了重复回答的情况并且结果对应不上，模型过拟合
+- predict_rouge-l：ROUGE-L 衡量模型生成文本与参考文本之间最长公共子序列（Longest Common Subsequence）的匹配程度。值越高表示生成的文本与参考文本越相似，最大值为 100。
 
-解决方案：增大数据集，混合普通数据到里面
+- predict_runtime：预测运行时间，表示模型生成一批样本所花费的总时间。单位通常为秒。
 
-#### 微调2
+- predict_samples_per_second：每秒生成的样本数量，表示模型每秒钟能够生成的样本数量。通常用于评估模型的推理速度。
+- predict_steps_per_second：每秒执行的步骤数量，表示模型每秒钟能够执行的步骤数量。对于生成模型，一般指的是每秒钟执行生成操作的次数。
 
-- 学习率：4e-5
-- 轮数：10
-- 批处理：1
-- 梯度累计：8
-- LoRA秩：128
-- 缩放系数：256
+#### 实现新闻标题分类器
 
-结论：训练出的模型通过使用训练集的问题进行问答，回答与结果一致，成功率能够达到60%+左右，但是当模型回答了专业的问题后再问其他的问题，依旧按照专业的问题进行回答。（大模型灾难性遗忘，过拟合）
+##### 微调1
 
-解决方案：新增数据集、混合普通数据进行训练
+微调环境：
 
-#### 微调3
+- 模型：**DeepSeek-R1-1.5B-Distill** 
+- 显卡：2张2080TI 共44G显存
+- 数据集：[新闻分类](https://atp-modelzoo-sh.oss-cn-shanghai.aliyuncs.com/release/llama_factory/data_news_300.zip)
 
-- 数据集：1000法律数据集、1000通用数据集，90%训练集，10%验证集
-- 学习率：4e-5
-- 训练轮数：20
+微调参数：
+
+- 学习率：5e-6
+- 轮数：3
+- lora缩放系数：16
 
 ```sh
-export CUDA_VISIBLE_DEVICES=2,3 && nohup llamafactory-cli train \
+nohup llamafactory-cli train \
     --stage sft \
     --do_train True \
     --model_name_or_path /app/LLaMA-Factory/model/DeepSeek-R1-Distill-Qwen-1.5B \
     --preprocessing_num_workers 16 \
     --finetuning_type lora \
     --template deepseek3 \
-    --flash_attn auto \
+    --flash_attn fa2 \
     --dataset_dir data \
-    --dataset data_law \
+    --dataset news_train \
     --cutoff_len 2048 \
-    --learning_rate 4e-5 \
-    --num_train_epochs 20.0 \
-    --max_samples 100000 \
-    --per_device_train_batch_size 1 \
-    --gradient_accumulation_steps 8 \
-    --lr_scheduler_type cosine \
-    --max_grad_norm 1.0 \
-    --logging_steps 5 \
-    --save_steps 100 \
-    --warmup_steps 5 \
-    --packing False \
-    --report_to none \
-    --output_dir saves/DeepSeek-R1-1.5B-Distill/lora/train_2025-02-26-09-04-36 \
-    --bf16 True \
-    --plot_loss True \
-    --trust_remote_code True \
-    --ddp_timeout 180000000 \
-    --include_num_input_tokens_seen True \
-    --optim adamw_torch \
-    --lora_rank 8 \
-    --lora_alpha 16 \
-    --lora_dropout 0 \
-    --loraplus_lr_ratio 16 \
-    --lora_target all \
-    --swanlab_project llamafactory \
-    --swanlab_mode local \
-    --deepspeed cache/ds_z3_config.json  > llama.log 2>&1 & disown && ps -ef |grep '/usr/local/bin/llamafactory-cli train' | grep -v 'grep' | awk '{print $2}' > llamafactory.pid
-```
-
-微调后的测试结论，bleu-4在30左右数值，模型出现拟合，在训练集表现好测试集的数据就泛化能力不够
-
-![image-20250228104525686](images/image-20250228104525686.png)
-
-解决方案：降低轮数
-
-#### 微调4
-
-- 数据集：1000法律数据集、1000通用数据集，90%训练集，10%验证集
-- 学习率：4e-5
-- 训练轮数：10
-
-```sh
-export CUDA_VISIBLE_DEVICES=2,3 && nohup llamafactory-cli train \
-    --stage sft \
-    --do_train True \
-    --model_name_or_path /app/LLaMA-Factory/model/DeepSeek-R1-Distill-Qwen-1.5B \
-    --preprocessing_num_workers 16 \
-    --finetuning_type lora \
-    --template deepseek3 \
-    --flash_attn auto \
-    --dataset_dir data \
-    --dataset data_law \
-    --cutoff_len 2048 \
-    --learning_rate 4e-5 \
-    --num_train_epochs 10.0 \
-    --max_samples 100000 \
-    --per_device_train_batch_size 1 \
-    --gradient_accumulation_steps 8 \
-    --lr_scheduler_type cosine \
-    --max_grad_norm 1.0 \
-    --logging_steps 5 \
-    --save_steps 100 \
-    --warmup_steps 5 \
-    --packing False \
-    --report_to none \
-    --output_dir saves/DeepSeek-R1-1.5B-Distill/lora/train_2025-02-27-10-33-51 \
-    --bf16 True \
-    --plot_loss True \
-    --trust_remote_code True \
-    --ddp_timeout 180000000 \
-    --include_num_input_tokens_seen True \
-    --optim adamw_torch \
-    --lora_rank 8 \
-    --lora_alpha 16 \
-    --lora_dropout 0 \
-    --loraplus_lr_ratio 16 \
-    --lora_target all \
-    --swanlab_project llamafactory \
-    --swanlab_mode local \
-    --deepspeed cache/ds_z3_config.json  > llama.log 2>&1 & disown && ps -ef |grep '/usr/local/bin/llamafactory-cli train' | grep -v 'grep' | awk '{print $2}' > llamafactory.pid
-```
-
-微调后结论：降低了轮数，使用测试集相比较微调2回调效果要好一点，但是bleu-4的分支上升的不多
-
-![image-20250228131600033](images/image-20250228131600033.png)
-
-优化方案：尝试提高学习率，降低轮数
-
-#### 微调5
-
-- 数据集：1000法律数据集、1000通用数据集，90%训练集，10%验证集
-- 学习率：3e-4
-- 训练轮数：10
-
-```sh
-export CUDA_VISIBLE_DEVICES=2,3 && nohup llamafactory-cli train \
-    --stage sft \
-    --do_train True \
-    --model_name_or_path /app/LLaMA-Factory/model/DeepSeek-R1-Distill-Qwen-1.5B \
-    --preprocessing_num_workers 16 \
-    --finetuning_type lora \
-    --template deepseek3 \
-    --flash_attn auto \
-    --dataset_dir data \
-    --dataset law_train \
-    --cutoff_len 2048 \
-    --learning_rate 3e-4 \
-    --num_train_epochs 10 \
+    --learning_rate 5e-6 \
+    --num_train_epochs 3 \
     --max_samples 100000 \
     --per_device_train_batch_size 2 \
     --gradient_accumulation_steps 2 \
@@ -340,11 +229,11 @@ export CUDA_VISIBLE_DEVICES=2,3 && nohup llamafactory-cli train \
     --max_grad_norm 1.0 \
     --logging_steps 5 \
     --save_steps 100 \
-    --warmup_steps 4 \
+    --warmup_steps 0 \
     --packing False \
     --report_to none \
     --use_swanlab True \
-    --output_dir saves/DeepSeek-R1-1.5B-Distill/lora/train_2025-02-28-05-20-59 \
+    --output_dir saves/DeepSeek-R1-1.5B-Distill/lora/train_2025_news-1 \
     --bf16 True \
     --plot_loss True \
     --trust_remote_code True \
@@ -357,13 +246,272 @@ export CUDA_VISIBLE_DEVICES=2,3 && nohup llamafactory-cli train \
     --loraplus_lr_ratio 16 \
     --lora_target all \
     --swanlab_project llamafactory \
+    --swanlab_run_name deepseek-r1-1.5b_news-1 \
+    --swanlab_mode local \
+    --deepspeed cache/ds_z3_config.json   > llama.log 2>&1 & disown && ps -ef |grep '/usr/local/bin/llamafactory-cli train' | grep -v 'grep' | awk '{print $2}' > llamafactory.pid
+```
+
+模型评估：
+
+```sh
+nohup llamafactory-cli train \
+    --stage sft \
+    --model_name_or_path /app/LLaMA-Factory/model/DeepSeek-R1-Distill-Qwen-1.5B \
+    --preprocessing_num_workers 16 \
+    --finetuning_type lora \
+    --quantization_method bitsandbytes \
+    --template deepseek3 \
+    --flash_attn auto \
+    --dataset_dir data \
+    --eval_dataset news_eval \
+    --cutoff_len 1024 \
+    --max_samples 100000 \
+    --per_device_eval_batch_size 2 \
+    --predict_with_generate True \
+    --max_new_tokens 2048 \
+    --top_p 0.7 \
+    --temperature 0.7 \
+    --output_dir saves/DeepSeek-R1-1.5B-Distill/lora/eval_2025_news-1 \
+    --trust_remote_code True \
+    --do_predict True \
+    --adapter_name_or_path saves/DeepSeek-R1-1.5B-Distill/lora/train_2025_news-1  > llama_test.log 2>&1 & disown
+```
+
+微调结果：
+
+![image-20250301204712917](images/image-20250301204712917.png)
+
+![image-20250301200438797](images/image-20250301200438797.png)
+
+- 训练时长7分20秒
+- 模型测试，可以进行新闻分类，并且也能够回答其他的通用问题
+- 通过人工进行交叉验证，回答正确率较低，并且出现了重复回答的现象过拟合了
+
+##### 微调2
+
+继续微调1中的模型，通过修改参数查看对模型的影响
+
+- 学习率：1e-05
+- 轮数：3
+- lora缩放系数：16
+
+```sh
+nohup llamafactory-cli train \
+    --stage sft \
+    --do_train True \
+    --model_name_or_path /app/LLaMA-Factory/model/DeepSeek-R1-Distill-Qwen-1.5B \
+    --preprocessing_num_workers 16 \
+    --finetuning_type lora \
+    --template deepseek3 \
+    --flash_attn auto \
+    --dataset_dir data \
+    --dataset news_train \
+    --cutoff_len 2048 \
+    --learning_rate 1e-05 \
+    --num_train_epochs 3 \
+    --max_samples 100000 \
+    --per_device_train_batch_size 2 \
+    --gradient_accumulation_steps 2 \
+    --lr_scheduler_type cosine \
+    --max_grad_norm 1.0 \
+    --logging_steps 5 \
+    --save_steps 100 \
+    --warmup_steps 0 \
+    --packing False \
+    --report_to none \
+    --use_swanlab True \
+    --output_dir saves/DeepSeek-R1-1.5B-Distill/lora/train_2025_news-2 \
+    --bf16 True \
+    --plot_loss True \
+    --trust_remote_code True \
+    --ddp_timeout 180000000 \
+    --include_num_input_tokens_seen True \
+    --optim adamw_torch \
+    --lora_rank 8 \
+    --lora_alpha 16 \
+    --lora_dropout 0 \
+    --loraplus_lr_ratio 16 \
+    --lora_target all \
+    --swanlab_project llamafactory \
+    --swanlab_run_name deepseek-r1-1.5b_news-2 \
+    --swanlab_mode local \
+    --deepspeed cache/ds_z3_config.json   > llama.log 2>&1 & disown && ps -ef |grep '/usr/local/bin/llamafactory-cli train' | grep -v 'grep' | awk '{print $2}' > llamafactory.pid
+```
+
+模型评估：
+
+```sh
+nohup llamafactory-cli train \
+    --stage sft \
+    --model_name_or_path /app/LLaMA-Factory/model/DeepSeek-R1-Distill-Qwen-1.5B \
+    --preprocessing_num_workers 16 \
+    --finetuning_type lora \
+    --quantization_method bitsandbytes \
+    --template deepseek3 \
+    --flash_attn auto \
+    --dataset_dir data \
+    --eval_dataset news_eval \
+    --cutoff_len 1024 \
+    --max_samples 100000 \
+    --per_device_eval_batch_size 2 \
+    --predict_with_generate True \
+    --max_new_tokens 2048 \
+    --top_p 0.7 \
+    --temperature 0.7 \
+    --output_dir saves/DeepSeek-R1-1.5B-Distill/lora/eval_2025_news-2 \
+    --trust_remote_code True \
+    --do_predict True \
+    --adapter_name_or_path saves/DeepSeek-R1-1.5B-Distill/lora/train_2025_news-2  > llama_test.log 2>&1 & disown
+```
+
+微调结果：
+
+![image-20250301204835052](images/image-20250301204835052.png)
+
+![image-20250301205708332](images/image-20250301205708332.png)
+
+- 训练时长7分20秒
+- 模型测试，可以进行新闻分类，并且也能够回答其他的通用问题
+- 通过人工进行交叉验证，回答正确率较低
+
+##### 微调3
+
+再次尝试调整学习率
+
+- 学习率：3e-05
+
+微调结果：
+
+![image-20250301210739526](images/image-20250301210739526.png)
+
+![image-20250301211624532](images/image-20250301211624532.png)
+
+- 训练时长7分钟26秒
+- 模型测试，可以进行新闻分类，并且也能够回答其他的通用问题
+- 通过人工进行交叉验证，回答正确率还是较低
+
+##### 微调4
+
+上面3次微调通过修改学习率并不能提高模型对问题的回答成功率，可能是数据量或者学习轮数太少接下来提高轮数来查看是否可以提高模型的正确率；通过评估可以看到第三次的指标得分是最高的，接下来采用的参数以第3次的微调参数为准
+
+- 学习率：3e-05
+- 轮数：10
+
+微调结果：
+
+![image-20250301215057724](images/image-20250301215057724.png)
+
+![image-20250301215553649](images/image-20250301215553649.png)
+
+- 训练时长23分钟24秒
+- 可以发现整个loss损失率的曲线是一直在降低的，但是一直没有趋于平缓，模型还是出现了过拟合的现象
+- 通过评估得分可以看出，增加轮数也没有明显的提升分数
+
+##### 微调5
+
+- 学习率：3e-05
+- 轮数：10
+- lora_rank：128
+- lora_alpha：256
+
+微调结果：
+
+
+
+#### 微调法律助手
+
+微调环境：
+
+- 模型：**DeepSeek-R1-1.5B-Distill** 
+- 显卡：2张2080TI 共44G显存
+- 数据集：[法律数据集](https://modelscope.cn/datasets/Robin021/DISC-Law-SFT) / [DeepSeek-R1数据集](https://modelscope.cn/datasets/liucong/Chinese-DeepSeek-R1-Distill-data-110k-SFT/files)
+
+##### 微调1
+
+- 学习率：3e-5
+- 轮数：3
+- 数据：截取其中9000条法律数据集
+
+```sh
+export CUDA_VISIBLE_DEVICES=2,3 && llamafactory-cli train \
+    --stage sft \
+    --do_train True \
+    --model_name_or_path /app/LLaMA-Factory/model/DeepSeek-R1-Distill-Qwen-1.5B \
+    --preprocessing_num_workers 16 \
+    --finetuning_type lora \
+    --template deepseek3 \
+    --flash_attn fa2 \
+    --dataset_dir data \
+    --dataset law_train \
+    --cutoff_len 2048 \
+    --learning_rate 3e-5 \
+    --num_train_epochs 3 \
+    --max_samples 100000 \
+    --per_device_train_batch_size 1 \
+    --gradient_accumulation_steps 8 \
+    --lr_scheduler_type cosine \
+    --max_grad_norm 1.0 \
+    --logging_steps 5 \
+    --save_steps 100 \
+    --warmup_steps 0 \
+    --packing False \
+    --report_to none \
+    --use_swanlab True \
+    --output_dir saves/DeepSeek-R1-1.5B-Distill/lora/train_2025_law-1 \
+    --bf16 True \
+    --plot_loss True \
+    --trust_remote_code True \
+    --ddp_timeout 180000000 \
+    --include_num_input_tokens_seen True \
+    --optim adamw_torch \
+    --lora_rank 8 \
+    --lora_alpha 16 \
+    --lora_dropout 0 \
+    --loraplus_lr_ratio 16 \
+    --lora_target all \
+    --swanlab_project llamafactory \
+    --swanlab_run_name deepseek-r1-1.5b_law-1 \
     --swanlab_mode local \
     --deepspeed cache/ds_z3_config.json > llama.log 2>&1 & disown && ps -ef |grep '/usr/local/bin/llamafactory-cli train' | grep -v 'grep' | awk '{print $2}' > llamafactory.pid
 ```
 
-微调后结论：
+微调结果：
 
-优化方案：
+![image-20250302155956800](images/image-20250302155956800.png)
+
+![image-20250302184710742](images/image-20250302184710742.png)
+
+- 训练时长6小时30分钟24秒
+- 数据集9000条法律数据，可以看到损失率的图像波动不大，通过测试集发现评分标准也比较高
+- 模型拥有了回答法律相关的能力，并且成功率可以达到60%
+- 通过使用通用问题测试后发现DeepSeek-R1丧失了深度思考的能力，以及失去了通用问题回答的能力（灾难性遗忘）
+
+##### 微调2
+
+根据微调1的结果，发现9000条法律数据集微调后，模型失去了回答通用问题的能力，本次微调将减少数据集看看是否会影响到模型的通用能力
+
+- 学习率：3e-5
+- 轮数：3
+- 数据：截取其中2000条法律数据集
+
+微调结果：
+
+![image-20250302200914919](images/image-20250302200914919.png)
+
+- 训练时长1小时18分钟3秒
+- 通过对微调后的大模型实验降低法律数据集到2000条后，大模型出现了过拟合的现象，模型不能很好的回答问题并且通用问题也不能很好的回答，深度思考的能力也丢失了
+
+##### 微调3
+
+微调2降低数据集后模型的效果很不好，通用能力丧失了，而且对训练数据的支持也很差了。本次微调尝试增加轮数
+
+- 学习率：3e-5
+- 轮数：10
+- 数据：截取其中2000条法律数据集
+
+微调结果：
+
+
 
 ### 3.2.4 问题总结
 
