@@ -513,7 +513,160 @@ export CUDA_VISIBLE_DEVICES=2,3 && llamafactory-cli train \
 
 微调结果：
 
+![QQ_1740966019959](images/QQ_1740966019959.png)
 
+![QQ_1740967886027](images/QQ_1740967886027.png)
+
+- 模型loss逐渐平缓
+- 性能评估后发现指标并不高
+- 模型测试大模型失去了通用能力，能够回答上专业法律问题并且引用条例，但是在训练集上面表现比较好，测试集表现就很差了；模型典型的过拟合了缺乏泛化能力
+
+##### 微调4
+
+通过上面测试发现，使用法律数据集后无论是降低学习率还是调整训练轮数都不能缓解模型的过拟合问题，接下来尝试调整lora参数
+
+- 学习率：3e-5
+- 轮数：3
+- 数据：截取其中2000条法律数据集
+- lora_rank：32
+- lora_alpha：64
+- lora_dropout：0.3
+
+```sh
+export CUDA_VISIBLE_DEVICES=2,3 && nohup llamafactory-cli train \
+    --stage sft \
+    --do_train True \
+    --model_name_or_path /app/LLaMA-Factory/model/DeepSeek-R1-Distill-Qwen-1.5B \
+    --preprocessing_num_workers 16 \
+    --finetuning_type lora \
+    --template deepseek3 \
+    --flash_attn fa2 \
+    --dataset_dir data \
+    --dataset law_train \
+    --cutoff_len 2048 \
+    --learning_rate 3e-5 \
+    --num_train_epochs 5 \
+    --max_samples 100000 \
+    --per_device_train_batch_size 1 \
+    --gradient_accumulation_steps 8 \
+    --lr_scheduler_type cosine \
+    --max_grad_norm 1.0 \
+    --logging_steps 5 \
+    --save_steps 100 \
+    --warmup_steps 0 \
+    --packing False \
+    --report_to none \
+    --use_swanlab True \
+    --output_dir saves/DeepSeek-R1-1.5B-Distill/lora/train_2025_law-4 \
+    --bf16 True \
+    --plot_loss True \
+    --trust_remote_code True \
+    --ddp_timeout 180000000 \
+    --include_num_input_tokens_seen True \
+    --optim adamw_torch \
+    --lora_rank 32 \
+    --lora_alpha 64 \
+    --val_size 0.2 \
+    --eval_strategy steps \
+    --eval_steps 10 \
+    --lora_dropout 0.3 \
+    --loraplus_lr_ratio 16 \
+    --lora_target all \
+    --swanlab_project llamafactory \
+    --swanlab_run_name deepseek-r1-1.5b_law-4 \
+    --swanlab_mode local \
+    --deepspeed cache/ds_z3_config.json > llama.log 2>&1 & disown && ps -ef |grep '/usr/local/bin/llamafactory-cli train' | grep -v 'grep' | awk '{print $2}' > llamafactory.pid
+```
+
+微调结果：
+
+![image-20250303150514617](images/image-20250303150514617.png)
+
+![image-20250303171241686](images/image-20250303171241686.png)
+
+- 训练时长1小时54分钟46秒
+- 通过大模型验证测试，模型出现了过拟合的现象，实际测试跟微调3区别不大
+
+##### 微调5
+
+再次尝试调整lora参数
+
+- 学习率：3e-5
+- 轮数：3
+- 数据：截取其中2000条法律数据集
+- lora_rank：128
+- lora_alpha：256
+- lora_dropout：0.3
+- val_size：0.1 验证集为训练集的10%
+
+微调结果：
+
+![image-20250304092729598](images/image-20250304092729598.png)
+
+![image-20250304092744698](images/image-20250304092744698.png)
+
+- 通过调整lora相关的参数发现模型不管问什么问题都是回答的通用问题，lora系数缩放过大参数更新范围也比较大所以出现了灾难性遗忘；而验证集loss在前面降低后面上升是明显的出现了过拟合的现象
+- 通过交叉验证，模型失去了通用能力
+
+##### 微调6
+
+使用混合数据进行训练
+
+- 数据集：500条通用数据集、1000法律数据集
+- 学习率：3e-5
+- lora_rank：8
+- lora_alpha：16
+
+微调结果：
+
+![image-20250305165307241](images/image-20250305165307241.png)
+
+![image-20250305165232859](images/image-20250305165232859.png)
+
+- 微调时长2小时28分钟49秒
+- 大模型通用能力没有丧失，也能够回答专业数据，但是回答的准确率不高
+
+##### 微调7
+
+加大混合数据量
+
+- 数据集：8000条法律数据、5000条通用数据集
+- 学习率：3e-5
+- 训练轮数：5
+- lora_rank：8
+- lora_alpha：16
+
+微调结果：
+
+![image-20250305145221624](images/image-20250305145221624.png)
+
+![image-20250305154657301](images/image-20250305154657301.png)
+
+- 训练时长19小时54分钟，loss图由于普通数据和专业数据结合所以在计算的时候特征相距较大所以就会出现波动比较大的情况，但是整体是下降的
+- 通过使用混合数据训练后，模型没有失去回答通用问题的能力，专业能力也具备引用具体的法律条例
+- 模型出现了复读机的问题，模型还是出现了过拟合现象，但是模型的问答效果还是不错
+
+##### 微调8
+
+上面使用的是混合数据集进行微调，loss图一直处于抖动，所以本次微调尝试将数据分为两个数据集，一个专业数据集，一个通用数据集进行微调，并且加大一点学习率
+
+- 数据集：8000条法律数据、5000条通用数据集
+- 学习率：5e-5
+- 训练轮数：5
+- lora_rank：8
+- lora_alpha：16
+
+- 学习率预热步数（warmup）：500
+
+微调结果：
+
+![image-20250306132705444](images/image-20250306132705444.png)
+
+![image-20250306142805362](images/image-20250306142805362.png)
+
+- 微调时长19小时52分钟21秒，通过loss可以看到跟微调7的过程差不多
+- 评估结果可以看到将数据集拆分可得到的分数要比微调7合并在一起作为混合数据训练要高许多
+- 通过专业数据集可以回答专业问题并且引用条例；通过通用数据集也有一定的泛化能力，不过准确率还有待提高
 
 ### 3.2.4 问题总结
 
@@ -544,6 +697,7 @@ export CUDA_VISIBLE_DEVICES=2,3 && llamafactory-cli train \
 - 恰好拟合（完美）
 - 不收敛
   - 数据有问题
+  - loss线一直处于震荡状态
 
 # 4. Langchain
 
@@ -691,6 +845,72 @@ print(chain.invoke({'text': '我很郁闷怎么办'}))
 
 ### 4.3.5 聊天机器人
 
+```python
+def get_session_history(session_id: str):
+    if session_id not in store:
+        store[session_id] = ChatMessageHistory()
+    return store[session_id]
+
+
+def normal_chat(chat_robot: RunnableWithMessageHistory):
+    # 第一轮聊天
+    config = {
+        'configurable': {'session_id': 'zs1'}  # 给当前会话定义一个session_id
+    }
+    resp = chat_robot.invoke(
+        {
+            'my_message': [HumanMessage(content="你好啊！我是空空")],
+            'language': '中文'
+        },
+        config=config
+    )
+    print(resp)
+
+
+def steam_chat(chat_robot: RunnableWithMessageHistory):
+    # 第一轮聊天
+    config = {
+        'configurable': {'session_id': 'zs1'}  # 给当前会话定义一个session_id
+    }
+    messages = {
+        'my_message': [HumanMessage(content="你好啊！我是空空")],
+        'language': '中文'
+    }
+    for resp in chat_robot.steam(messages, config=config):
+        print(resp.content)
+
+
+if __name__ == '__main__':
+    # 创建聊天机器人案例
+    llm = ChatOllama(
+        base_url="http://192.168.2.236:11434",
+        model="vanilj/qwen2.5-32b-instruct_iq4_xs:latest",
+        temperature=0.8,
+        num_predict=256,
+    )
+    system_template = ChatPromptTemplate.from_messages([
+        ("system", "你的身份是一个心理辅导师，你将给用户提供最专业的心理辅导，用{language}来回答所有的问题"),
+        MessagesPlaceholder(variable_name='my_message')  # 将历史数据进行注入
+    ])
+    # 最简单的字符串解析器
+    parser = StrOutputParser()
+    # 通过链的方式来调用
+    chain = system_template | llm | parser
+
+    # 保存聊天的历史记录，所有的用户的聊天记录都保存到store，key：sessionId
+    store = {}
+
+    chat_robot = RunnableWithMessageHistory(
+        chain,
+        get_session_history,
+        input_messages_key='my_message'  # 每次聊天的时候发送消息需要插入的模板
+    )
+
+    # normal_chat(chat_robot)
+    steam_chat(chat_robot)
+
+```
+
 
 
 ### 4.3.6 构建向量数据库
@@ -726,11 +946,12 @@ def get_sample_documents():
 
 if __name__ == '__main__':
     # 实例化一个向量数据空间
-    embeddings = OllamaEmbeddings()
-    # 指定ollama的地址
-    embeddings.base_url = "http://127.0.0.1:11434"
-    # 指定向量化技术的模型名称
-    embeddings.model = ""
+    embeddings = OllamaEmbeddings(
+        # 指定ollama的地址
+        base_url="http://192.168.2.236:11434",
+        # 指定向量化技术的模型名称
+        model="chevalblanc/acge_text_embedding",
+    )
     vector_store = Chroma.from_documents(get_sample_documents(), embedding=embeddings)
     # 相似度的查询：返回相似度的分数，分数越低相似度越高
     score = vector_store.similarity_search_with_score('狗')
@@ -739,7 +960,32 @@ if __name__ == '__main__':
     # 检索器：bind(k=1) 返回相似度最高的一个，整合langchain链条，需要将其转换为RunnableLambda对象
     retriever = RunnableLambda(vector_store.similarity_search).bind(k=1)
     print(retriever.batch(['咖啡猫', '鲨鱼']))
-    pass
+
+    message = """
+    使用提供的上下文仅回答这个问题：
+    {question}
+    上下文：
+    {context}
+    """
+
+    prompt_temp = ChatPromptTemplate.from_messages([
+        ('human', message)
+    ])
+
+    model = ChatOllama(
+        base_url="http://127.0.0.1:11434",
+        model="",
+        temperature=0.8,
+    )
+
+    # RunnablePassthrough允许我们将用户的问题后面再传递给prompt和model
+    chain = {
+                'question': RunnablePassthrough(),
+                'context': retriever
+            } | prompt_temp | model
+
+    resp = chain.invoke('请介绍一下猫？')
+    print(resp.content)
 ```
 
 ### 4.3.7 构建代理
